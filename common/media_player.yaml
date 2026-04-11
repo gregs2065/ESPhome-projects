@@ -1,0 +1,14 @@
+media_player:
+  - platform: speaker
+    id: onboard_media_player
+    name: ${friendly_name} Audio
+    announcement_pipeline:
+      speaker: board_speaker
+      format: WAV
+    codec_support_enabled: true
+    task_stack_in_psram: true
+    buffer_size: 6000
+    on_pause:
+      - logger.log: "Playback paused!"
+    on_idle:
+      - logger.log: "Playback finished!"   

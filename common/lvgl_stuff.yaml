@@ -1,0 +1,625 @@
+lvgl:
+  displays:
+    - my_display
+  buffer_size: 25%
+
+  style_definitions:
+    - id: header_style
+      bg_color: 0xffffff
+      text_color: 0x000000
+      text_font: ${"montserrat_18" if is480x320 else "montserrat_14"} 
+      width: 100%
+      y: 0
+      pad_all: 1
+      height: ${"30" if is480x320 else "25"}
+      border_width: 0
+
+    - id: main_widget_style
+      bg_color: 0xddddFF      
+      border_color: 0x000000
+      border_width: 2
+      radius: 0
+      x: -2 #border_width
+      y: ${"32" if is480x320 else "27"}
+      width: ${display_width + 2*2}
+      height: ${(display_height - 57) if is480x320 else (display_height - 50)}
+
+      scrollbar_mode: "OFF"
+
+
+
+    - id: footer_style
+      bg_color: 0x2F8CD8
+      bg_grad_color: 0x005782
+      bg_grad_dir: VER
+      bg_opa: COVER
+      border_opa: TRANSP
+      radius: 0
+      pad_all: 0
+      pad_row: 0
+      pad_column: 0
+      border_color: 0x0077b3
+      text_color: 0xFFFFFF
+      width: 100%
+      height: ${"30" if is480x320 else "25"}
+
+
+  theme:
+    buttonmatrix:
+      bg_opa: TRANSP
+      border_color: 0x0077b3
+      border_width: 0
+      text_color: 0xFFFFFF
+      pad_all: 0
+      items: # set all your buttonmatrix buttons to use your custom defined styles and font
+        bg_color: 0x2F8CD8
+        bg_grad_color: 0x005782
+        bg_grad_dir: VER
+        bg_opa: COVER
+        border_color: 0x0077b3
+        border_width: 1
+        text_color: 0xFFFFFF
+        pressed:
+          bg_color: 0x006699
+          bg_grad_color: 0x00334d
+        checked:
+          bg_color: 0x1d5f96
+          bg_grad_color: 0x03324A
+          text_color: 0x005580
+
+  top_layer:
+    widgets:
+      - obj:
+          styles: header_style
+          align: top_left
+          bg_opa: TRANSP
+          scrollbar_mode: "OFF"
+          
+          layout: # enable the FLEX layout for the child widgets
+            type: flex
+            flex_flow: ROW_WRAP
+            flex_align_cross: start
+            flex_align_main: start
+            pad_column: 1
+
+          widgets:
+            - image:
+                src: washing_machine_small
+                id: icon_wash
+                image_recolor: my_red
+                image_recolor_opa: cover
+            - image:
+                src: dryer_small
+                id: icon_dryer
+                image_recolor: my_blue
+                image_recolor_opa: cover
+            - image:
+                src: dishwasher_icon_small
+                id: icon_dishwasher
+                image_recolor: my_green
+                image_recolor_opa: cover
+      - obj:
+          styles: header_style
+          align: top_right
+          bg_opa: TRANSP
+          layout: # enable the FLEX layout for the child widgets
+            type: flex
+            flex_flow: ROW_WRAP
+            flex_align_cross: end
+            flex_align_main: end
+            pad_column: 1
+          widgets:
+            - label:
+                text: "\uf1eb"
+                text_font: ${"montserrat_14" if is480x320 else "montserrat_12"} 
+                id: lbl_hastatus
+                hidden: true
+                align: top_right
+                text_align: right
+                pad_right: 5
+      - buttonmatrix:
+          align: bottom_mid
+          styles: footer_style
+          pad_all: 0
+          outline_width: 0
+          id: top_layer
+          items:
+            styles: footer_style
+          rows:
+            - buttons:
+              - id: page_prev
+                text: "\uF053"
+                on_press:
+                  then:
+                    - script.execute: page_prev_alt
+                    - script.execute: pause_page_turn
+              - id: page_home
+                text: "\uF015"
+                on_press:
+                  then:
+                    - lvgl.page.show: 
+                        id: outside_page
+                        animation: OUT_BOTTOM
+                        time: 1000ms
+                    - script.execute: pause_page_turn
+              - id: page_next
+                text: "\uF054"
+                on_press:
+                  then:
+                    - script.execute: page_next_alt
+                    - script.execute: pause_page_turn
+      - obj:
+          id: boot_screen
+          x: 0
+          y: 0
+          width: 100%
+          height: 100%
+          bg_color: 0xffffff
+          bg_opa: COVER
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          widgets:
+            - image:
+                align: CENTER
+                src: boot_logo
+                y: ${"-40" if is480x320 else "-25"}
+            - spinner:
+                align: CENTER
+                y: ${"95" if is480x320 else "81"}
+                height: ${"50" if is480x320 else "38"}
+                width: ${"50" if is480x320 else "38"}
+                spin_time: 1s
+                arc_length: 60deg
+                arc_width: ${"8" if is480x320 else "6"}
+                indicator:
+                  arc_color: 0x18bcf2
+                  arc_width: 8
+          on_press:
+            - lvgl.widget.hide: boot_screen
+      - obj:
+          id: notify_box
+          align: center
+          hidden: true
+          bg_color: 0xffeeee
+          bg_opa: 75%
+          radius: 15
+          pad_all: 0
+          border_width: 5
+          border_color: 0x222222
+          width: 75%
+          height: 60%
+          shadow_ofs_x: 15
+          shadow_ofs_y: 15
+          shadow_width: 30
+          shadow_spread: 0
+
+          layout: # enable the FLEX layout for the children widgets
+            type: flex
+            flex_flow: ROW_WRAP
+            flex_align_cross: start
+            flex_align_main: start
+            pad_column: 5
+          widgets:
+            - image:
+                align: CENTER
+                src: dogbowl2
+            - label:
+                text: "My Message\n\n123"
+                id: notify_msg
+          on_press:
+            - lvgl.widget.hide: notify_box  
+  
+  pages:
+    - id: outside_page
+      widgets:
+      - obj:
+          align: TOP_MID
+          styles: header_style
+          widgets:
+            - label:
+                text: "Outside Conditions"
+                align: CENTER
+                text_align: CENTER
+      - obj:
+          styles: main_widget_style
+          on_press:
+            then:
+              - script.execute: pause_page_turn
+          layout: # enable the FLEX layout for the children widgets
+            type: flex
+            flex_flow: ROW_WRAP
+            flex_align_cross: CENTER
+            flex_align_main: CENTER
+          text_font: ${"montserrat_30" if is480x320 else "montserrat_16"} 
+
+          scrollbar_mode: "OFF"
+          widgets:
+            - label:
+                text: "Temperature/Humidity"
+                text_color: 0x2596be
+                width: 100%
+            - label:
+                text: "x"
+                text_align: center
+                text_font: ${"montserrat_60" if is480x320 else "montserrat_40"} 
+                width: ${"49%" if is480x320 else "40%"}
+                id: outside_temperature_lbl
+            - label:
+                text: "y"
+                text_align: center
+                text_font: ${"montserrat_60" if is480x320 else "montserrat_40"} 
+                width: ${"49%" if is480x320 else "40%"}
+                id: outside_humidity_lbl
+            - label:
+                text: "Pool Temperature"
+                text_color: 0x2596be
+                width: 100%
+            - label:
+                text: "-"
+                text_align: center
+                text_font: ${"montserrat_60" if is480x320 else "montserrat_40"} 
+                width: 100%
+                id: pool_temperature_lbl
+    - id: dogfeed_page
+      widgets:
+      - obj:
+          align: TOP_MID
+          styles: header_style
+          widgets:
+            - label:
+                text: "Dog Feeding"
+                align: CENTER
+                text_align: CENTER
+      - obj:
+          styles: main_widget_style
+          on_press:
+            then:
+              - script.execute: pause_page_turn
+          layout: # enable the FLEX layout for the children widgets
+            type: flex
+            flex_flow: ROW_WRAP
+            flex_align_cross: CENTER
+            flex_align_main: CENTER
+            pad_column: 5
+          text_font: ${"montserrat_24" if is480x320 else "montserrat_18"} 
+          widgets:
+                - label:
+                    id: storm_fed
+                    text: "Storm Last Fed: "
+                    width: 100%
+                - image:
+                    src: dogbowl2
+                    id: dog1_1
+                - image:
+                    src: dogbowl2
+                    id: dog1_2
+                - image:
+                    src: dogbowl2
+                    id: dog1_3
+                - label:
+                    id: dog1_plus
+                    text: "+ (n)"
+                - label:
+                    id: dusty_fed
+                    text: "Dusty Last Fed: "
+                    width: 100%
+                - image:
+                    src: dogbowl2
+                    id: dog2_1
+                - image:
+                    src: dogbowl2
+                    id: dog2_2
+                - image:
+                    src: dogbowl2
+                    id: dog2_3
+                - label:
+                    id: dog2_plus
+                    text: "+ (n)"
+    - id: dishwasher_page
+      widgets:
+      - obj:
+          align: TOP_MID
+          styles: header_style
+          widgets:
+            - label:
+                text: "Dishwasher"
+                align: CENTER
+                text_align: CENTER
+      - obj:
+          styles: main_widget_style
+          on_press:
+            then:
+              - script.execute: pause_page_turn
+          layout: # enable the FLEX layout for the children widgets
+            type: flex
+            flex_flow: ROW_WRAP
+            flex_align_cross: CENTER
+            flex_align_main: CENTER
+          text_font: ${"montserrat_24" if is480x320 else "montserrat_18"} 
+
+          scrollbar_mode: "OFF"
+          widgets:
+                - label:
+                    id: dishwasher_lastrun_lbl
+                    text: "Last Run: "
+                    width: 100%
+                    text_color: 0x000000
+                - obj:
+                    width: 100%
+                    height: ${210 if is480x320 else 150} #height of the largest widget 
+                    bg_color: 0xddddFF
+                    border_width: 0
+                    scrollbar_mode: "OFF"            
+                    widgets:
+                    - image:
+                        align: CENTER
+                        src: dishwasher_icon
+                        id: dish_1
+                        image_recolor: my_green
+                        image_recolor_opa: cover
+                    - label:
+                        align: CENTER
+                        id: dishwasher_progress_lbl
+                        text: "Progress..."   
+                        text_color: 0x000000
+                        bg_color: 0xffffff
+                        bg_opa: 75%
+                        pad_all: ${15 if is480x320 else 11}
+                        radius: 5
+                        border_width: 2
+
+                    - buttonmatrix:
+                        y: ${60 if is480x320 else 43}
+                        align: CENTER
+                        width: ${220 if is480x320 else 156}
+                        height: ${40 if is480x320 else 28}
+                        id: dishwasher_buttons
+                        one_checked: true
+                        rows:
+                          - buttons:
+                            - id: button_1
+                              text: "Dirty?"
+                              control:
+                                checkable: false
+                              on_press:
+                                then:
+                                  - homeassistant.action:
+                                      action: input_select.select_option
+                                      data:
+                                        entity_id: input_select.dishwasher_status
+                                        option: Dirty
+                                  - lvgl.widget.hide: dishwasher_buttons
+                                  
+                            - id: button_2
+                              text: "Clean?"
+                              control:
+                                checkable: false
+                              on_press:
+                                then:
+                                  - homeassistant.action:
+                                      action: input_select.select_option
+                                      data:
+                                        entity_id: input_select.dishwasher_status
+                                        option: Clean
+                                  - lvgl.widget.hide: dishwasher_buttons
+    - id: green_egg_page
+      widgets:
+      - obj:
+          align: TOP_MID
+          styles: header_style
+          widgets:
+            - label:
+                text: "Big Green Egg"
+                align: CENTER
+                text_align: CENTER
+      - obj:
+          styles: main_widget_style
+          on_press:
+            then:
+              - script.execute: pause_page_turn
+          layout: # enable the FLEX layout for the children widgets
+            type: flex
+            flex_flow: ROW_WRAP
+            flex_align_cross: CENTER
+            flex_align_main: CENTER
+          text_font: ${"montserrat_30" if is480x320 else "montserrat_16"} 
+          bg_color: my_green
+
+          scrollbar_mode: "OFF"
+          widgets:
+            - label:
+                text: "Cook Temperature"
+                text_color: my_white
+                width: 100%
+            - label:
+                text: "x"
+                text_align: center
+                text_font: ${"montserrat_60" if is480x320 else "montserrat_40"} 
+                text_color: my_yellow
+                width: 100%
+                id: cook_temperature_lbl
+            - label:
+                text: "Probe Temperatures"
+                text_color: my_white
+                width: 100%
+            - label:
+                text: "x"
+                text_align: center
+                text_font: ${"montserrat_60" if is480x320 else "montserrat_34"} 
+                text_color: my_yellow
+                width: ${"32%" if is480x320 else "30%"}
+                id: probe1_lbl
+            - label:
+                text: "x"
+                text_align: center
+                text_font: ${"montserrat_60" if is480x320 else "montserrat_34"} 
+                text_color: my_yellow
+                width: ${"32%" if is480x320 else "30%"}
+                id: probe2_lbl
+            - label:
+                text: "x"
+                text_align: center
+                text_font: ${"montserrat_60" if is480x320 else "montserrat_34"} 
+                text_color: my_yellow
+                width: ${"32%" if is480x320 else "30%"}
+                id: probe3_lbl
+
+    # - id: room_page
+    #   widgets:
+    #     - obj:
+    #         styles: main_widget_style
+            
+    #         layout: # enable the FLEX layout for the children widgets
+    #             type: flex
+    #             flex_flow: ROW_WRAP
+    #             flex_align_cross: CENTER
+    #             flex_align_main: CENTER
+    #             pad_column: 5
+    #             pad_row: 30
+    #         widgets:
+    #         - slider:
+    #             id: dimmer_slider_1
+    #             # align: CENTER
+    #             width: 320
+    #             height: 30
+    #             pad_all: 20
+    #             min_value: 0
+    #             max_value: 255
+    #             on_release:
+    #               - homeassistant.action:
+    #                   action: light.turn_on
+    #                   data:
+    #                     entity_id: light.keypad_with_dimmer_49_f4_2e_main
+    #                     brightness: !lambda return int(x);
+    #         - slider:
+    #             id: dimmer_slider_2
+    #             # align: CENTER
+    #             width: 320
+    #             height: 30
+    #             pad_all: 20
+    #             min_value: 0
+    #             max_value: 255
+    #             on_release:
+    #               - homeassistant.action:
+    #                   action: light.turn_on
+    #                   data:
+    #                     entity_id: light.micro_dimmer_55_94_bd
+    #                     brightness: !lambda return int(x);
+    #         - slider:
+    #             id: dimmer_slider_3
+    #             # align: CENTER
+    #             width: 320
+    #             height: 30
+    #             pad_all: 20
+    #             min_value: 0
+    #             max_value: 255
+    #             on_release:
+    #               - homeassistant.action:
+    #                   action: light.turn_on
+    #                   data:
+    #                     entity_id: light.keypad_dimmer_56_7b_21_main
+    #                     brightness: !lambda return int(x);
+
+
+
+
+#     - id: media_page
+#       widgets:
+#       - obj:
+#           align: TOP_MID
+#           styles: header_style
+#           widgets:
+#             - label:
+#                 text: "Media"
+#                 align: CENTER
+#                 text_align: CENTER
+#       - obj:
+#           styles: main_widget_style
+#           on_press:
+#             then:
+#               - script.execute: pause_page_turn
+#           layout: # enable the FLEX layout for the children widgets
+#             type: flex
+#             flex_flow: ROW_WRAP
+#             flex_align_cross: CENTER
+#             flex_align_main: CENTER
+#           text_font: ${"montserrat_30" if is480x320 else "montserrat_16"} 
+
+#           scrollbar_mode: "OFF"
+#           widgets:
+#             - label:
+#                 text: "Temperature/Humidity"
+#                 text_color: 0x2596be
+#                 width: 100%
+#             - label:
+#                 text: "x"
+#                 text_align: center
+#                 text_font: ${"montserrat_60" if is480x320 else "montserrat_40"} 
+#                 width: ${"49%" if is480x320 else "40%"}
+
+#             - image:
+#                 src: my_online_image
+#                 id: webimgtest
+
+# http_request:
+
+# online_image:
+#   - id: my_online_image
+#     url: "http://bender.lan:8123/local/left/3823c.jpg" # Replace with your image URL
+#     format: jpg # Or jpg, bmp, etc., depending on your image
+
+#     type: RGB565 # Or other format suitable for your display
+#     # resize: 200x200 # Optional: resize the image
+#     on_download_finished:
+#       - lvgl.image.update:
+#           id: webimgtest
+#           src: my_online_image
+
+
+
+
+
+
+    # - id: main_page
+    #   widgets:
+    #     - obj:
+    #         id: main_page_1
+    #         styles: main_widget_style
+    #         widgets:
+    #         - label:
+    #             align: TOP_MID
+    #             text: 'Hello World!'
+    #             id: widget_1         
+    #         - image:
+    #             align: center
+    #             src: dogbowl2
+    #             id: img_id
+    #         - image:
+    #             align: BOTTOM_MID
+    #             src: dogbowl2
+    #             id: img_id2
+    #             radius: 11
+    #             clip_corner: true
+    #         - image:
+    #             align: BOTTOM_RIGHT
+    #             src: dogbowl2
+    #             id: img_id3
+    #             radius: 11
+    #             clip_corner: true
+    #             on_click:
+    #               then:
+    #               - lvgl.widget.show: notify_box
+
+
+    
+
+
+
+  # on_idle:
+  #   timeout: !lambda 'return (id(display_page_delay).state * 1000);'
+  #   then:
+  #     - logger.log: "LVGL is idle"
+  #     - light.turn_off: display_backlight
+  #     - lvgl.pause:
+

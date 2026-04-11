@@ -1,0 +1,100 @@
+esphome:
+  name: "doorbell"
+  friendly_name: Doorbell
+
+esp8266:
+  board: d1
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  password: !secret ota_password
+  platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: .lan 
+  use_address: 192.168.42.160
+  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Testesp8266 Fallback Hotspot"
+    password: "bPJTUXjdvTD2"
+
+
+
+captive_portal:
+
+text_sensor:
+  - platform: homeassistant
+    id: doorbell_active
+    entity_id: input_boolean.doorbell_active
+    internal: true
+
+output:
+  - platform: gpio
+    pin: 5 #D1
+    id: DoorbellButton 
+    #Triggers when D1 contacts ground
+
+switch:
+  - platform: output
+    name: "Doorbell"
+    output: DoorbellButton
+    id: myDoorbell
+    on_turn_on: 
+    - delay: 500ms
+    - switch.turn_off: myDoorbell
+        
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: 2 #D4
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    name: "DoorbellPress"
+          
+    on_press:
+      then:
+        if:
+          condition:
+            lambda: 'return id(doorbell_active).state == "on";'
+          then:
+            - logger.log: "Button Pressed - Press Bell"
+            - switch.turn_on: myDoorbell
+          else:
+            - logger.log: "Button Pressed - Bell Blocked"
+
+
+      # on_...:
+  # if:
+  #   condition:
+  #     wifi.connected:
+  #   then:
+  #     - logger.log: WiFi is connected!
+
+    on_release:
+      then:
+        if:
+          condition:
+            lambda: 'return id(doorbell_active).state == "on";'
+          then:
+            - switch.turn_off: myDoorbell #Redundant
+            - logger.log: "Button Released - Release Bell"
+          else:
+            - switch.turn_off: myDoorbell #Redundant
+            - logger.log: "Button Released - Bell Blocked"
+
+      
+
+

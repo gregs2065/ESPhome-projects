@@ -1,0 +1,77 @@
+esphome:
+  name: pm25-sensor
+  friendly_name: PM 2.5 Sensor
+
+esp32:
+  board: lolin_c3_mini
+  framework:
+    type: arduino
+
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: "31b4936a9162f14dee803897a8a854fb"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: .lan
+  use_address: 192.168.42.189
+  output_power: 8.5dB
+
+  ap:
+    ssid: "PM 2.5 Sensor Fallback Hotspot"
+    password: "AY7CnnWK1H0l"
+
+captive_portal:
+
+
+uart:
+  - id: pms_uart
+    tx_pin: TX
+    rx_pin: RX
+    baud_rate: 9600
+
+i2c:
+  sda: SDA
+  scl: SCL
+
+sensor:
+  - platform: pmsx003
+    type: PMSX003
+    # uart_id: pms_uart
+    pm_1_0:
+      name: "PM <1.0µm"
+    pm_2_5:
+      name: "PM <2.5µm"
+    pm_10_0:
+      name: "PM <10.0µm"
+
+    pm_0_3um:
+      name: "PM 0.3µm count"
+    pm_0_5um:
+      name: "PM 0.5µm count"
+    pm_1_0um:
+      name: "PM 1.0µm count"
+    pm_2_5um:
+      name: "PM 2.5µm count"
+    pm_10_0um:
+      name: "PM 10.0µm count"
+    update_interval: 60s
+
+  - platform: sht3xd
+    temperature:
+      name: "Temperature"
+      filters:
+        - offset: -3.1
+
+    humidity:
+      name: "Humidity"

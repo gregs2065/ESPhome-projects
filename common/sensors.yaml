@@ -1,0 +1,305 @@
+sensor:
+  - id: dishwasher_status_progress
+    platform: homeassistant
+    entity_id: sensor.dishwasher_program_progress
+    internal: true
+    on_value: 
+      then:
+        - if:
+            condition:
+              lambda: 'return !isnan( id(dishwasher_status_progress).state );'
+            then:
+              - lvgl.label.update:
+                  id: dishwasher_progress_lbl
+                  text:
+                    format: "Progress: %.0f%%"
+                    args: [ 'id(dishwasher_status_progress).state' ]
+            else:
+              - lvgl.label.update:
+                  id: dishwasher_progress_lbl
+                  text: 
+                    format: "%s"
+                    args: ['id(dishwasher_status_message).state.c_str()']
+
+  - id: outside_temperature
+    platform: homeassistant    
+    entity_id: sensor.my_weather_station_temp_1
+    internal: true
+    on_value: 
+      then:
+        - lvgl.label.update:
+            id: outside_temperature_lbl
+            text:
+              format: "%.0f°"
+              args: [ 'id(outside_temperature).state' ]
+
+  - id: outside_humidity
+    platform: homeassistant
+    entity_id: sensor.my_weather_station_humidity_1
+    internal: true
+    on_value: 
+      then:
+        - lvgl.label.update:
+            id: outside_humidity_lbl
+            text:
+              format: "%.0f%%"
+              args: [ 'id(outside_humidity).state' ]
+
+  - id: pool_temperature
+    platform: homeassistant
+    entity_id: sensor.pool_temp
+    internal: true
+    on_value: 
+      then:
+        - if:
+            condition:
+              lambda: 'return !isnan( id(pool_temperature).state );'
+            then:
+              - lvgl.label.update:
+                  id: pool_temperature_lbl
+                  text:
+                    format: "%.1f°"
+                    args: [ 'id(pool_temperature).state' ]
+            else:
+              - lvgl.label.update:
+                  id: pool_temperature_lbl
+                  text: "-" #"offline"
+
+  - id: dog_feed_counter
+    platform: homeassistant
+    entity_id: counter.dog_feed_counter
+    internal: true
+    on_value:
+      then:
+      - lvgl.widget.hide: dog1_1
+      - lvgl.widget.hide: dog1_2
+      - lvgl.widget.hide: dog1_3
+      - lvgl.widget.hide: dog1_plus
+      - if:
+          condition:
+            lambda: 'return id(dog_feed_counter).state == 1;'
+          then:
+            - lvgl.widget.show: dog1_1
+      - if:
+          condition:
+            lambda: 'return id(dog_feed_counter).state == 2;'
+          then:
+            - lvgl.widget.show: dog1_1
+            - lvgl.widget.show: dog1_2
+      - if:
+          condition:
+            lambda: 'return id(dog_feed_counter).state == 3;'
+          then:
+            - lvgl.widget.show: dog1_1
+            - lvgl.widget.show: dog1_2
+            - lvgl.widget.show: dog1_3
+      - if:
+          condition:
+            lambda: 'return id(dog_feed_counter).state > 3;'
+          then:
+            - lvgl.widget.show: dog1_1
+            - lvgl.widget.show: dog1_2
+            - lvgl.label.update:
+                id: dog1_plus
+                text:
+                  format: "plus (%.0f total)"
+                  args: [ 'id(dog_feed_counter).state' ]
+            - lvgl.widget.show: dog1_plus
+
+  - id: dog_feed_counter_2
+    platform: homeassistant
+    entity_id: counter.dog_feed_counter_2
+    internal: true
+    on_value:
+      then:
+      - lvgl.widget.hide: dog2_1
+      - lvgl.widget.hide: dog2_2
+      - lvgl.widget.hide: dog2_3
+      - lvgl.widget.hide: dog2_plus
+      - if:
+          condition:
+            lambda: 'return id(dog_feed_counter_2).state == 1;'
+          then:
+            - lvgl.widget.show: dog2_1
+      - if:
+          condition:
+            lambda: 'return id(dog_feed_counter_2).state == 2;'
+          then:
+            - lvgl.widget.show: dog2_1
+            - lvgl.widget.show: dog2_2
+      - if:
+          condition:
+            lambda: 'return id(dog_feed_counter_2).state == 3;'
+          then:
+            - lvgl.widget.show: dog2_1
+            - lvgl.widget.show: dog2_2
+            - lvgl.widget.show: dog2_3
+      - if:
+          condition:
+            lambda: 'return id(dog_feed_counter_2).state > 3;'
+          then:
+            - lvgl.widget.show: dog2_1
+            - lvgl.widget.show: dog2_2
+            - lvgl.label.update:
+                id: dog2_plus
+                text:
+                  format: "plus (%.0f total)"
+                  args: [ 'id(dog_feed_counter_2).state' ]
+            - lvgl.widget.show: dog2_plus
+
+  - id: BGE_cook_temp
+    platform: homeassistant
+    entity_id: sensor.big_green_egg_cook_temp
+    internal: true
+    on_value: 
+      then:
+      - lvgl.label.update:
+          id: cook_temperature_lbl
+          text:
+            format: "%.0f°"
+            args: [ 'id(BGE_cook_temp).state' ]
+
+  - id: BGE_food1_temp
+    platform: homeassistant
+    entity_id: sensor.big_green_egg_food1_temp
+    internal: true
+    on_value: 
+      then:
+      - lvgl.label.update:
+          id: probe1_lbl
+          text:
+            format: "%.0f°"
+            args: [ 'id(BGE_food1_temp).state' ]
+
+  - id: BGE_food2_temp
+    platform: homeassistant
+    entity_id: sensor.big_green_egg_food2_temp
+    internal: true
+    on_value: 
+      then:
+      - lvgl.label.update:
+          id: probe2_lbl
+          text:
+            format: "%.0f°"
+            args: [ 'id(BGE_food2_temp).state' ]
+
+  - id: BGE_food3_temp
+    platform: homeassistant
+    entity_id: sensor.big_green_egg_food3_temp
+    internal: true
+    on_value: 
+      then:
+      - lvgl.label.update:
+          id: probe3_lbl
+          text:
+            format: "%.0f°"
+            args: [ 'id(BGE_food3_temp).state' ]
+
+text_sensor:
+  - id: notify_box_msg
+    platform: homeassistant    
+    entity_id: input_text.notification_box_esp_displays
+    internal: true
+    on_value: 
+      then:
+        - lvgl.label.update:
+            id: notify_msg
+            text: 
+              args: ["id(notify_box_msg).state.c_str()"]
+              format: "%s"
+
+  - id: dishwasher_lastrun
+    platform: homeassistant
+    entity_id: input_text.dishwasher_last_run
+    internal: true
+    on_value: 
+      then:
+        - lvgl.label.update:
+            id: dishwasher_lastrun_lbl
+            text:
+              format: "Last Run: %s"
+              args: [ 'id(dishwasher_lastrun).state.c_str()' ]
+
+  - id: dishwasher_door
+    platform: homeassistant
+    entity_id: sensor.dishwasher_door
+    internal: true
+    on_value: 
+      then:
+      - if:
+          condition:
+            lambda: 'return id(dishwasher_door).state == "open";'
+          then:
+          - lvgl.page.show:
+              id: dishwasher_page
+          - script.execute: pause_page_turn
+
+  - id: dishwasher_active
+    platform: homeassistant
+    entity_id: sensor.dishwasher_operation_state
+    internal: true
+
+  - id: dishwasher_status_message
+    platform: homeassistant
+    entity_id: input_select.dishwasher_status
+    internal: true
+    on_value: 
+      then:
+      - lvgl.label.update:
+          id: dishwasher_progress_lbl
+          text:
+            format: "%s"
+            args: [ 'id(dishwasher_status_message).state.c_str()' ]
+      - if:
+          condition:
+            lambda: 'return id(dishwasher_status_message).state == "Dirty (Maybe)";'
+          then:
+            - lvgl.widget.show: dishwasher_buttons
+          else:
+            - lvgl.widget.hide: dishwasher_buttons
+
+
+  - id: dog_last_fed
+    platform: homeassistant
+    entity_id: input_text.dog_feeding_last_time_fed
+    internal: true
+    on_value: 
+      then:
+        - lvgl.label.update:
+            id: storm_fed
+            text:
+              format: "Storm Last Fed: %s"
+              args: [ 'id(dog_last_fed).state.c_str()' ]
+
+  - id: dog_last_fed_2
+    platform: homeassistant
+    entity_id: input_text.dog_feeding_2_last_time_fed
+    internal: true
+    on_value: 
+      then:
+        - lvgl.label.update:
+            id: dusty_fed
+            text:
+              format: "Dusty Last Fed: %s"
+              args: [ 'id(dog_last_fed_2).state.c_str()' ]
+
+
+  - id: washing_machine_active
+    platform: homeassistant
+    entity_id: input_boolean.washing_machine_started
+    internal: true
+
+  - id: washing_machine_status
+    platform: homeassistant
+    entity_id: input_select.washing_machine_status
+    internal: true
+
+  - id: dryer_status
+    platform: homeassistant
+    entity_id: input_select.dryer_status
+    internal: true
+
+
+  - platform: wifi_info
+    ip_address:
+      id: ip_address

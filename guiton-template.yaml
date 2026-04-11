@@ -1,0 +1,189 @@
+esphome:
+  name: guiton-template
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
+      CONFIG_SPIRAM_RODATA: y
+
+psram:
+  mode: octal
+  speed: 80MHz 
+
+substitutions:
+  display_width: 480
+  display_height: 320
+  is480x320: true
+  friendly_name: "Guiton Template"
+
+packages:   # as a list
+  - !include common/common_elements.yaml
+  - !include common/sensors.yaml
+  - !include common/lvgl_stuff.yaml
+  - !include common/media_player.yaml
+
+i2s_audio:
+  id: i2s_bus_audio_main
+  i2s_lrclk_pin: GPIO2
+  i2s_bclk_pin: GPIO42
+  i2s_mclk_pin: GPIO00
+
+speaker:
+  - id: board_speaker
+    platform: i2s_audio
+    i2s_audio_id: i2s_bus_audio_main
+    i2s_dout_pin: GPIO41
+    dac_type: external
+    channel: mono
+    use_apll: true
+
+spi:
+  id: display_qspi
+  type: quad
+  clk_pin: 47
+  data_pins: [21, 48, 40, 39]
+
+i2c:
+  id: touchscreen_bus
+  sda: 4
+  scl: 8
+
+output:
+  - platform: ledc
+    pin: GPIO1
+    id: backlight
+
+display:
+  - id: my_display
+    platform: qspi_dbi
+    model: axs15231
+    data_rate: 40MHz
+    spi_id: display_qspi
+    dimensions:
+      height: ${display_width}
+      width: ${display_height}
+    cs_pin: 45
+    rotation: 90 # 90 for landscape, 0 for portrait
+    auto_clear_enabled: false
+
+touchscreen:
+  - id: my_touch
+    platform: axs15231    
+    display: my_display
+    i2c_id: touchscreen_bus
+    calibration:
+      x_min: 0
+      x_max: ${display_width - 19}
+      y_min: 0
+      y_max: ${display_height - 10}
+    transform:
+      swap_xy: true
+      mirror_y: true
+    on_touch:
+      - lambda: |-
+          ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+            touch.x,
+            touch.y,
+            touch.x_raw,
+            touch.y_raw
+          );
+    
+    on_release:
+      then:
+        - if:
+            condition: lvgl.is_paused
+            then:
+              - light.turn_on: display_backlight
+              - lvgl.resume:
+              - lvgl.widget.redraw:
+              
+
+# light:
+#   - platform: esp32_rmt_led_strip
+#     rgb_order: GRB
+#     pin: GPIO18
+#     num_leds: 10
+#     chipset: ws2812
+#     name: "My LEDs"
+
+#     effects:
+#       - addressable_twinkle:
+#       - addressable_twinkle:
+#           name: Twinkle Effect With Custom Values
+#           twinkle_probability: 5%
+#           progress_interval: 4ms
+#       - addressable_scan:
+#       - addressable_scan:
+#           name: Scan Effect With Custom Values
+#           move_interval: 100ms
+#           scan_width: 3
+#       - addressable_flicker:
+#       - addressable_flicker:
+#           name: Flicker Effect With Custom Values
+#           update_interval: 16ms
+#           intensity: 5%
+#       - addressable_color_wipe:
+#       - addressable_color_wipe:
+#           name: Color Wipe Effect With Custom Values
+#           colors:
+#             - red: 100%
+#               green: 100%
+#               blue: 100%
+#               num_leds: 5
+#               gradient: true
+#             - red: 0%
+#               green: 0%
+#               blue: 0%
+#               num_leds: 1
+#           add_led_interval: 100ms
+#           reverse: false
+#       - addressable_fireworks:
+#       - addressable_fireworks:
+#           name: Fireworks Effect With Custom Values
+#           update_interval: 32ms
+#           spark_probability: 10%
+#           use_random_color: false
+#           fade_out_rate: 120
+#       - pulse:
+#       - pulse:
+#           name: "Fast Pulse"
+#           transition_length: 0.5s
+#           update_interval: 0.5s
+#           min_brightness: 0%
+#           max_brightness: 100%
+#       - pulse:
+#           name: "Slow Pulse"
+#           transition_length: 500ms
+#           update_interval: 2s
+#       - pulse:
+#           name: "Asymmetrical Pulse"
+#           transition_length:
+#             on_length: 1s
+#             off_length: 500ms
+#           update_interval: 1.5s
+#       - strobe:
+#       - strobe:
+#           name: Strobe Effect With Custom Values
+#           colors:
+#             - state: true
+#               brightness: 100%
+#               red: 100%
+#               green: 90%
+#               blue: 0%
+#               duration: 500ms
+#             - state: false
+#               duration: 250ms
+#             - state: true
+#               brightness: 100%
+#               red: 0%
+#               green: 100%
+#               blue: 0%
+#               duration: 500ms

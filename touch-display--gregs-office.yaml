@@ -1,0 +1,45 @@
+esphome:
+  name: "touch-display-gregs-office"
+  friendly_name: "Touch Display - Greg's Office"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+substitutions:
+  display_width: 320
+  display_height: 240
+  is480x320: false
+
+packages:   # as a list
+- !include common/CYD-2432S028R.yaml
+- !include common/common_elements.yaml
+- !include common/sensors.yaml
+- !include common/lvgl_stuff.yaml
+
+# Define a monochromatic, dimmable light for the backlight
+light:
+  - id: rgbLed
+    platform: rgb
+    name: "RGB LED"
+    red: output_red
+    green: output_green
+    blue: output_blue
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 2s      
+
+display:
+  - platform: ili9xxx
+    model: ILI9341
+    spi_id: lcd
+    cs_pin: 15
+    dc_pin: 2
+    id: my_display
+    rotation: 90
+    color_palette: 8BIT
+    data_rate: 40MHz
+    invert_colors: false    
+    dimensions: 240x320
+    auto_clear_enabled: false
+    update_interval: never

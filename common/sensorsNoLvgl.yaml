@@ -1,0 +1,111 @@
+
+sensor:
+  - platform: homeassistant
+    id: light_brightness
+    entity_id: light.greg_s_office_lights
+    attribute: brightness
+
+  - platform: homeassistant
+    id: dishwasher_status_progress
+    entity_id: sensor.dishwasher_program_progress
+    internal: true
+
+  - platform: homeassistant
+    id: outside_temperature
+    entity_id: sensor.my_weather_station_temp_1
+    internal: true
+
+  - platform: homeassistant
+    id: outside_humidity
+    entity_id: sensor.my_weather_station_humidity_1
+    internal: true
+
+  - platform: homeassistant
+    id: pool_temperature
+    entity_id: sensor.pool_temp
+    internal: true
+
+  - platform: homeassistant
+    id: dog_feed_counter
+    entity_id: counter.dog_feed_counter
+    internal: true
+
+  - platform: homeassistant
+    id: dog_feed_counter_2
+    entity_id: counter.dog_feed_counter_2
+    internal: true
+
+  - platform: homeassistant
+    id: display_brightness
+    entity_id: input_number.display_brightness
+    internal: true
+
+  - platform: homeassistant
+    id: BGE_cook_temp
+    entity_id: sensor.big_green_egg_cook_temp
+    internal: true
+
+  - platform: homeassistant
+    id: BGE_food1_temp
+    entity_id: sensor.big_green_egg_food1_temp
+    internal: true
+
+  - platform: homeassistant
+    id: BGE_food2_temp
+    entity_id: sensor.big_green_egg_food2_temp
+    internal: true
+
+  - platform: homeassistant
+    id: BGE_food3_temp
+    entity_id: sensor.big_green_egg_food3_temp
+    internal: true
+
+text_sensor:
+  - platform: homeassistant
+    id: notify_box_msg
+    entity_id: input_text.notification_box_esp_displays
+    internal: true
+
+  - platform: homeassistant
+    id: dishwasher_lastrun
+    entity_id: input_text.dishwasher_last_run
+    internal: true
+
+  - platform: homeassistant
+    id: dog_last_fed
+    entity_id: input_text.dog_feeding_last_time_fed
+    internal: true
+
+  - platform: homeassistant
+    id: dog_last_fed_2
+    entity_id: input_text.dog_feeding_2_last_time_fed
+    internal: true
+
+  - platform: homeassistant
+    id: dishwasher_active
+    entity_id: sensor.dishwasher_operation_state
+    internal: true
+
+  - platform: homeassistant
+    id: washing_machine_active
+    entity_id: input_boolean.washing_machine_started
+    internal: true
+
+  - platform: homeassistant
+    id: washing_machine_status
+    entity_id: input_select.washing_machine_status
+    internal: true
+
+  - platform: homeassistant
+    id: dryer_status
+    entity_id: input_select.dryer_status
+    internal: true
+
+  - platform: homeassistant
+    id: dishwasher_status_message
+    entity_id: input_select.dishwasher_status
+    internal: true
+
+  - platform: wifi_info
+    ip_address:
+      id: ip_address
