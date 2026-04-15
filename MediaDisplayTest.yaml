@@ -1,0 +1,571 @@
+# ============================================================
+# MediaDisplayTest.yaml
+# ============================================================
+# An ESPhome configuration that displays media player
+# information from Home Assistant on the AXS15231 480x320
+# touchscreen display.
+#
+# Displayed information (per MediaPlayerInfo.md):
+#   - Track Title
+#   - Artist Name
+#   - Album Artwork  (fetched live from Home Assistant via HTTP)
+#
+# Hardware (from guiton-template.yaml):
+#   - ESP32-S3-DevKitC-1, 16 MB flash, 8 MB octal PSRAM
+#   - QSPI AXS15231 480x320 display (40 MHz, landscape)
+#   - AXS15231 capacitive touchscreen (I2C)
+#   - I2S external DAC speaker (GPIO 2/42/0/41)
+#   - LEDC PWM backlight on GPIO1
+#
+# Backlight:
+#   Defaults to ON at boot (ALWAYS_ON restore mode) and is
+#   exposed to Home Assistant as a dimmable light entity so
+#   it can be controlled remotely.
+#
+# Customise the two substitutions marked below before flashing.
+# ============================================================
+
+esphome:
+  name: media-display-test
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: -100    # Low priority ensures Wi-Fi and API are already up before this runs
+    then:
+      # Attempt the first album-art download at boot so the display
+      # is populated as soon as Home Assistant sends state.
+      - component.update: album_art
+
+# ── Processor ─────────────────────────────────────────────────────────────────
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf   # ESP-IDF required for the QSPI display driver and PSRAM support
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"  # 240 MHz CPU for fluid LVGL rendering
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"        # Larger data cache improves LVGL buffer throughput
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"    # 64-byte cache lines align with LVGL access patterns
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y        # Execute code from PSRAM, freeing internal flash cache
+      CONFIG_SPIRAM_RODATA: y                    # Store read-only data in PSRAM to save internal SRAM
+
+# 8 MB octal PSRAM at 80 MHz holds the LVGL render buffers,
+# the online_image decode workspace, and decoded pixel data
+# without exhausting the 512 KB internal SRAM.
+psram:
+  mode: octal
+  speed: 80MHz
+
+# ── Substitutions ─────────────────────────────────────────────────────────────
+substitutions:
+  display_width: 480             # Logical width in pixels (landscape) — bare integer so arithmetic like ${display_width - 19} works
+  display_height: 320           # Logical height in pixels (landscape)
+  is480x320: "true"             # Guards shared style expressions for this resolution (must remain a string for the Jinja if-expression)
+  friendly_name: "Media Display Test"
+
+  # ┌─ Customise these before flashing ────────────────────────────────────────
+  # The Home Assistant entity_id of the media player to track
+  media_player_entity: "media_player.mainfloor_pi"
+
+  # Base URL of your HA instance — the ESP32 fetches album art from this host.
+  # Example: "http://192.168.1.10:8123"  or  "http://homeassistant.local:8123"
+  ha_base_url: "http://bender.lan:8123"
+  # └──────────────────────────────────────────────────────────────────────────
+
+# ── Connectivity ──────────────────────────────────────────────────────────────
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+  on_client_connected:
+    # Dismiss the boot splash as soon as any API client connects.
+    - lvgl.widget.hide: boot_screen
+    - logger.log:
+        format: "API client connected: %s from %s"
+        args: ["client_info.c_str()", "client_address.c_str()"]
+    # Show the Wi-Fi/HA status icon in the header only when HA itself connects.
+    - if:
+        condition:
+          lambda: 'return (0 == client_info.find("Home Assistant "));'
+        then:
+          - lvgl.widget.show: lbl_hastatus
+  on_client_disconnected:
+    - if:
+        condition:
+          lambda: 'return (0 == client_info.find("Home Assistant "));'
+        then:
+          # Grey out the indicator when HA drops off so the user knows state is stale
+          - lvgl.widget.hide: lbl_hastatus
+
+ota:
+  - platform: esphome
+    password: !secret ota_password   # Enables wireless firmware updates from the dashboard
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: .lan
+
+captive_portal:   # Fallback web portal served from the device when Wi-Fi credentials fail
+
+logger:           # Serial debug output via USB — useful during development
+
+# ── Hardware: Backlight ───────────────────────────────────────────────────────
+# The LEDC peripheral generates a PWM signal on GPIO1 that drives the backlight.
+# Wrapping it in a monochromatic light entity exposes it to Home Assistant so the
+# brightness can be adjusted remotely without any additional code.
+output:
+  - platform: ledc
+    pin: GPIO1
+    id: backlight_output
+
+light:
+  - platform: monochromatic
+    output: backlight_output
+    name: "Display Backlight"   # Visible in HA as a dimmable light
+    restore_mode: ALWAYS_ON     # Backlight comes on at boot per spec
+    id: display_backlight
+
+# ── Hardware: I2S Audio ───────────────────────────────────────────────────────
+# The guiton-template hardware includes a speaker.  Keeping it configured here
+# maintains compatibility with the hardware even though this config focuses on
+# the display only.  Remove if the speaker is not populated on your board.
+i2s_audio:
+  id: i2s_bus_audio_main
+  i2s_lrclk_pin: GPIO2     # LR clock (word select)
+  i2s_bclk_pin: GPIO42     # Bit clock
+  i2s_mclk_pin: GPIO00     # Master clock required by most external DACs
+
+speaker:
+  - id: board_speaker
+    platform: i2s_audio
+    i2s_audio_id: i2s_bus_audio_main
+    i2s_dout_pin: GPIO41   # Serial data out to the external I2S DAC
+    dac_type: external     # External I2S DAC, not the internal sigma-delta DAC
+    channel: mono
+    use_apll: true         # Audio PLL reduces jitter for cleaner sound output
+
+# ── Hardware: QSPI Display ────────────────────────────────────────────────────
+# The AXS15231 panel is driven over a 4-wire quad-SPI bus.  At 40 MHz the four
+# data lines together deliver ~160 Mbps, enough for smooth partial-screen updates.
+spi:
+  id: display_qspi
+  type: quad                        # Quad-SPI (4 data lines)
+  clk_pin: 47
+  data_pins: [21, 48, 40, 39]
+
+display:
+  - id: my_display
+    platform: qspi_dbi
+    model: axs15231
+    data_rate: 40MHz
+    spi_id: display_qspi
+    dimensions:
+      # The driver receives physical (portrait) dimensions.
+      # rotation: 90 swaps the logical axes so LVGL sees 480x320 landscape.
+      height: ${display_width}
+      width: ${display_height}
+    cs_pin: 45
+    rotation: 90               # 90° rotation = landscape, USB connector on the side
+    auto_clear_enabled: false  # LVGL owns the framebuffer; redundant clearing wastes time
+
+# ── Hardware: Capacitive Touchscreen ─────────────────────────────────────────
+i2c:
+  id: touchscreen_bus
+  sda: 4
+  scl: 8
+
+touchscreen:
+  - id: my_touch
+    platform: axs15231
+    display: my_display
+    i2c_id: touchscreen_bus
+    calibration:
+      x_min: 0
+      x_max: ${display_width - 19}   # 19 px margin clips hardware edge noise
+      y_min: 0
+      y_max: ${display_height - 10}  # 10 px bottom-edge margin
+    transform:
+      swap_xy: true    # Align touch X/Y axes with the display after 90° rotation
+      mirror_y: true   # Correct Y-axis inversion introduced by the rotation
+    on_touch:
+      # Log raw and calibrated coordinates — useful for tuning calibration values
+      - lambda: |-
+          ESP_LOGD("touch", "x=%d y=%d raw_x=%d raw_y=%d",
+            touch.x, touch.y, touch.x_raw, touch.y_raw);
+    on_release:
+      then:
+        # Touching the screen while the display is blanked (LVGL paused) wakes it up
+        - if:
+            condition: lvgl.is_paused
+            then:
+              - light.turn_on: display_backlight
+              - lvgl.resume:
+              - lvgl.widget.redraw:
+
+# ── HTTP Request ──────────────────────────────────────────────────────────────
+# The http_request component is the underlying transport used by online_image.
+# A 10-second timeout accommodates large album art JPEGs on slower networks.
+http_request:
+  useragent: esphome/media-display-test
+  timeout: 10s
+
+# ── Online Image: Album Artwork ───────────────────────────────────────────────
+# online_image fetches a JPEG from a URL, decodes it, and stores the
+# result as an RGB565 bitmap.  The LVGL image widget (album_art_widget) then
+# draws it directly from this buffer with no further conversion.
+#
+# Lifecycle:
+#  1. Boot: initialised with the HA favicon as a neutral placeholder image.
+#  2. HA connects: the ha_entity_picture text_sensor fires, calls set_url(),
+#     and triggers update() which starts the HTTP download.
+#  3. Download done: on_download_finished pushes the new image to the LVGL widget.
+#  4. Track changes: the text_sensor fires again and the cycle repeats.
+online_image:
+  - id: album_art
+    # Placeholder URL — a known JPEG on the HA instance used until the first
+    # real track starts.  The media player proxy endpoint always returns JPEG,
+    # so format: jpg is required.  Using png here caused "Incorrect PNG signature"
+    # errors because the decoder rejected the JPEG file header.
+    url: "${ha_base_url}/static/icons/favicon.ico"
+    format: jpg
+    type: RGB565      # Native pixel format of the display; no runtime conversion needed
+    resize: 240x240   # Scale to fill the left column of the media layout
+    on_download_finished:
+      # Notify the LVGL image widget that new pixel data is ready
+      - lvgl.image.update:
+          id: album_art_widget
+          src: album_art
+    on_error:
+      - logger.log:
+          format: "Album art download failed — previous image retained"
+          level: WARN
+
+# ── Home Assistant Sensors ────────────────────────────────────────────────────
+# Each text_sensor subscribes to an attribute (or the top-level state) of the
+# configured media player entity.  ESPhome calls on_value whenever HA pushes a
+# state change, keeping the display in sync without polling.
+
+text_sensor:
+  # ── Track Title ─────────────────────────────────────────────────────────────
+  # media_title carries the song name, podcast episode, radio station, etc.
+  - id: ha_media_title
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: media_title
+    internal: true   # Not re-published to HA; used only for local display
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: track_title_lbl
+            text:
+              format: "%s"
+              # Fall back to a placeholder when no track is available
+              args: ['x.empty() ? "Nothing Playing" : id(ha_media_title).state.c_str()']
+
+  # ── Artist Name ─────────────────────────────────────────────────────────────
+  # media_artist holds the performer, band, or podcast host name.
+  - id: ha_media_artist
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: media_artist
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: artist_name_lbl
+            text:
+              format: "%s"
+              args: ['id(ha_media_artist).state.c_str()']
+
+  # ── Album Artwork URL ────────────────────────────────────────────────────────
+  # entity_picture is a HA-relative path, e.g.:
+  #   "/api/media_player_proxy/media_player.xxx?token=abc&cache=xyz"
+  # We prepend ha_base_url to form the absolute URL the ESP32 can fetch
+  # directly over the local network without going through the internet.
+  - id: ha_entity_picture
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: entity_picture
+    internal: true
+    on_value:
+      then:
+        # Step 1: record the new URL immediately so it is ready when we download.
+        # entity_picture is a HA-relative path, e.g.:
+        #   "/api/media_player_proxy/media_player.xxx?token=abc&cache=xyz"
+        # The cache parameter changes with each track, ensuring a unique URL.
+        - lambda: |-
+            if (!x.empty()) {
+              std::string full_url = std::string("${ha_base_url}") + x;
+              id(album_art).set_url(full_url.c_str());
+            }
+        # Step 2: wait before downloading.
+        # HA's media proxy updates entity_picture URL as soon as the track
+        # changes, but the proxy itself may not have fetched and cached the
+        # new image yet.  Fetching immediately can return the previous track's
+        # artwork.  A short delay lets the proxy catch up before we download.
+        - delay: 1500ms
+        # Step 3: trigger the HTTP download with the URL set in step 1.
+        - lambda: |-
+            id(album_art).update();
+
+  # ── Playback State ────────────────────────────────────────────────────────
+  # Top-level state of the media player entity.  Common values:
+  #   "playing"  "paused"  "idle"  "off"  "unavailable"  "unknown"
+  - id: ha_player_state
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: playback_state_lbl
+            text:
+              format: "%s"
+              args: ['id(ha_player_state).state.c_str()']
+
+# ── LVGL ──────────────────────────────────────────────────────────────────────
+lvgl:
+  displays:
+    - my_display
+
+  # 25% of frame-buffer memory (~76 KB for 480x320x2) is allocated as the LVGL
+  # draw buffer.  This enables efficient partial-screen dirty-region rendering
+  # without needing a full second framebuffer.
+  buffer_size: 25%
+
+  # ── Shared Style Definitions ───────────────────────────────────────────────
+  # Defined once and referenced by id in the widget tree.  Using named styles
+  # keeps the widget definitions readable and changes easy to propagate.
+  style_definitions:
+    # Header bar: 30 px tall dark navy strip across the very top of the screen
+    - id: header_style
+      bg_color: 0x1a1a2e      # Dark navy — media app aesthetic
+      bg_opa: COVER
+      text_color: 0xffffff
+      text_font: montserrat_18
+      width: 100%
+      height: 30
+      y: 0
+      pad_all: 4
+      border_width: 0
+      radius: 0
+
+    # Left panel: slightly deeper shade behind the album art
+    - id: art_panel_style
+      bg_color: 0x0f3460
+      border_width: 0
+      radius: 0
+      pad_all: 0
+      scrollbar_mode: "OFF"
+
+    # Right panel: main dark background for the text area
+    - id: info_panel_style
+      bg_color: 0x16213e
+      border_width: 0
+      radius: 0
+      pad_left: 14
+      pad_top: 20
+      pad_right: 8
+      pad_bottom: 10
+      scrollbar_mode: "OFF"
+
+    # Track title label: large white text — the most prominent element
+    - id: title_label_style
+      text_color: 0xffffff
+      text_font: montserrat_28
+      bg_opa: TRANSP
+      border_width: 0
+
+    # Artist name label: muted lavender-grey, subordinate to the title
+    - id: artist_label_style
+      text_color: 0xaaaacc
+      text_font: montserrat_18
+      bg_opa: TRANSP
+      border_width: 0
+
+    # Playback state badge: accent cyan so it reads quickly at a glance
+    - id: state_label_style
+      text_color: 0x18bcf2
+      text_font: montserrat_14
+      bg_opa: TRANSP
+      border_width: 0
+
+  # ── Top Layer ──────────────────────────────────────────────────────────────
+  # Widgets in the top layer are rendered above all pages and survive page
+  # transitions.  We put the header bar and the boot splash here so they are
+  # always visible regardless of which page is showing.
+  top_layer:
+    widgets:
+      # ── Header bar ────────────────────────────────────────────────────────
+      # Permanent strip across the top showing the device name on the left
+      # and a Wi-Fi/HA connection icon on the right.
+      - obj:
+          styles: header_style
+          align: TOP_LEFT
+          layout:
+            type: flex
+            flex_flow: ROW
+            flex_align_cross: CENTER
+            flex_align_main: SPACE_BETWEEN   # Push name to left, icon to right
+
+          widgets:
+            # Device label — identifies this display on the wall
+            - label:
+                text: "${friendly_name}"
+                text_color: 0xffffff
+                text_font: montserrat_14
+                pad_left: 4
+
+            # HA status icon (Font Awesome Wi-Fi glyph 0xf1eb)
+            # Hidden by default; shown/hidden by api.on_client_connected callbacks
+            - label:
+                id: lbl_hastatus
+                text: "\uf1eb"
+                text_font: montserrat_14
+                text_color: 0x18bcf2   # Accent cyan matching the state badge
+                hidden: true
+                pad_right: 4
+
+      # ── Boot splash ────────────────────────────────────────────────────────
+      # Full-screen overlay that hides the unpopulated media page while the
+      # device is booting and connecting.  Dismissed automatically when HA
+      # connects (api.on_client_connected).  Tapping it also dismisses it,
+      # which is handy during development without a live HA connection.
+      - obj:
+          id: boot_screen
+          x: 0
+          y: 0
+          width: 100%
+          height: 100%
+          bg_color: 0x1a1a2e   # Same dark navy as the header — consistent startup look
+          bg_opa: COVER
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          widgets:
+            # Title text
+            - label:
+                align: CENTER
+                text: "Media Display"
+                text_color: 0xffffff
+                text_font: montserrat_28
+                y: -40
+            # Subtitle / status line
+            - label:
+                align: CENTER
+                text: "Connecting to Home Assistant..."
+                text_color: 0xaaaacc
+                text_font: montserrat_14
+                y: 10
+            # Animated spinner arc shows the device is alive and working
+            - spinner:
+                align: CENTER
+                y: 72
+                height: 48
+                width: 48
+                spin_time: 1s
+                arc_length: 60deg
+                arc_width: 8
+                indicator:
+                  arc_color: 0x18bcf2
+                  arc_width: 8
+          on_press:
+            - lvgl.widget.hide: boot_screen   # Tap-to-dismiss
+
+  # ── Pages ──────────────────────────────────────────────────────────────────
+  pages:
+    # ── Media Page ─────────────────────────────────────────────────────────
+    # This is the only page in the test configuration.
+    #
+    # Layout (480 x 290 px usable area below the 30 px header):
+    #
+    #  ┌────────────────────────┬──────────────────────────────────────────┐
+    #  │                        │                                          │
+    #  │     [Album Art]        │  Track Title  (large, wrapping)          │
+    #  │     240 x 240 px       │                                          │
+    #  │     rounded corners    │  Artist Name  (medium, muted)            │
+    #  │                        │                                          │
+    #  │                        │  ● playing    (state badge, accent cyan) │
+    #  │                        │                                          │
+    #  └────────────────────────┴──────────────────────────────────────────┘
+    #          240 px                          240 px
+    - id: media_page
+      bg_color: 0x16213e   # Dark background makes art and text stand out
+      widgets:
+        # ── Root row container ─────────────────────────────────────────────
+        # Sits immediately below the 30 px header and uses a FLEX ROW layout
+        # to place the art panel (left) and info panel (right) side-by-side.
+        - obj:
+            x: 0
+            y: 30                             # Start below the 30 px header
+            width: ${display_width}
+            height: ${display_height - 30}    # Remaining vertical space
+            bg_color: 0x16213e
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            scrollbar_mode: "OFF"
+            layout:
+              type: flex
+              flex_flow: ROW                  # Horizontal: art | info
+              flex_align_cross: CENTER
+              flex_align_main: START
+
+            widgets:
+              # ── Left panel: Album Artwork ─────────────────────────────
+              # The LVGL image widget (album_art_widget) is updated by
+              # online_image.on_download_finished whenever a new track starts.
+              # clip_corner + radius give the artwork rounded corners.
+              - obj:
+                  styles: art_panel_style
+                  width: 240
+                  height: ${display_height - 30}
+
+                  widgets:
+                    - image:
+                        id: album_art_widget
+                        src: album_art       # References the online_image component above
+                        align: CENTER
+                        radius: 14           # Rounded corners — card-like look
+                        clip_corner: true    # Clips the pixel data to the radius boundary
+
+              # ── Right panel: Track Information ────────────────────────
+              # A FLEX COLUMN container stacks three labels vertically:
+              #   track_title_lbl   ← updated by ha_media_title text_sensor
+              #   artist_name_lbl   ← updated by ha_media_artist text_sensor
+              #   playback_state_lbl ← updated by ha_player_state text_sensor
+              - obj:
+                  styles: info_panel_style
+                  width: 240
+                  height: ${display_height - 30}
+                  layout:
+                    type: flex
+                    flex_flow: COLUMN          # Stack labels top-to-bottom
+                    flex_align_cross: START
+                    flex_align_main: CENTER
+
+                  widgets:
+                    # Track title — largest text on the panel.
+                    # long_mode: WRAP allows multi-line display for long titles.
+                    - label:
+                        id: track_title_lbl
+                        styles: title_label_style
+                        text: "Nothing Playing"
+                        long_mode: WRAP
+                        width: 100%
+
+                    # Artist / album / show name — sits directly below the title
+                    - label:
+                        id: artist_name_lbl
+                        styles: artist_label_style
+                        text: ""
+                        long_mode: WRAP
+                        width: 100%
+
+                    # Playback state badge — a quick visual cue at the bottom
+                    # of the info panel showing "playing", "paused", "idle", etc.
+                    - label:
+                        id: playback_state_lbl
+                        styles: state_label_style
+                        text: "idle"
+                        pad_top: 12
