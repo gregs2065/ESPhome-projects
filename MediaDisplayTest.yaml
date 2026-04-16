@@ -9,6 +9,12 @@
 #   - Track Title
 #   - Artist Name
 #   - Album Artwork  (fetched live from Home Assistant via HTTP)
+#   - Playback State (playing / paused / idle / off / …)
+#
+# Header bar:
+#   - Device friendly name (left)
+#   - HA connection icon  (right group, hidden until connected)
+#   - Current time        (right group, rightmost)
 #
 # Hardware (from guiton-template.yaml):
 #   - ESP32-S3-DevKitC-1, 16 MB flash, 8 MB octal PSRAM
@@ -20,7 +26,11 @@
 # Backlight:
 #   Defaults to ON at boot (ALWAYS_ON restore mode) and is
 #   exposed to Home Assistant as a dimmable light entity so
-#   it can be controlled remotely.
+#   it can be controlled remotely.  Auto-off: turns off 30 s
+#   after playback stops.  Touch-to-wake resumes the display.
+#
+# Album art download delay (0–1500 ms, default 1500 ms):
+#   Exposed to HA as a number slider; tunable without reflashing.
 #
 # Customise the two substitutions marked below before flashing.
 # ============================================================
@@ -109,6 +119,14 @@ captive_portal:   # Fallback web portal served from the device when Wi-Fi creden
 
 logger:           # Serial debug output via USB — useful during development
 
+# ── Time: Clock Source ────────────────────────────────────────────────────────
+# Uses the Home Assistant time platform so the clock stays in sync with HA
+# without a separate NTP request.  The interval component below reads this
+# every minute and updates the header time label.
+time:
+  - platform: homeassistant
+    id: ha_time
+
 # ── Hardware: Backlight ───────────────────────────────────────────────────────
 # The LEDC peripheral generates a PWM signal on GPIO1 that drives the backlight.
 # Wrapping it in a monochromatic light entity exposes it to Home Assistant so the
@@ -124,6 +142,24 @@ light:
     name: "Display Backlight"   # Visible in HA as a dimmable light
     restore_mode: ALWAYS_ON     # Backlight comes on at boot per spec
     id: display_backlight
+
+# ── Album Art Download Delay ──────────────────────────────────────────────────
+# Template number exposed to Home Assistant as a slider.
+# Controls how long the device waits after a track change before fetching the
+# new album art, giving the HA media proxy time to cache the image.
+# Range 0–1500 ms; default 1500 ms.  Persisted across reboots.
+number:
+  - platform: template
+    name: "Album Art Download Delay"
+    id: album_art_delay
+    min_value: 0
+    max_value: 1500
+    step: 100
+    initial_value: 1500
+    restore_value: true
+    optimistic: true
+    unit_of_measurement: "ms"
+    entity_category: config
 
 # ── Hardware: I2S Audio ───────────────────────────────────────────────────────
 # The guiton-template hardware includes a speaker.  Keeping it configured here
@@ -201,6 +237,12 @@ touchscreen:
               - light.turn_on: display_backlight
               - lvgl.resume:
               - lvgl.widget.redraw:
+              # Restart the sleep countdown if music is still not playing
+              - if:
+                  condition:
+                    lambda: 'return id(ha_player_state).state != "playing";'
+                  then:
+                    - script.execute: backlight_timeout
 
 # ── HTTP Request ──────────────────────────────────────────────────────────────
 # The http_request component is the underlying transport used by online_image.
@@ -231,13 +273,18 @@ online_image:
     type: RGB565      # Native pixel format of the display; no runtime conversion needed
     resize: 240x240   # Scale to fill the left column of the media layout
     on_download_finished:
-      # Notify the LVGL image widget that new pixel data is ready
+      # Push new pixel data to the widget, then swap spinner back to artwork.
       - lvgl.image.update:
           id: album_art_widget
           src: album_art
+      - lvgl.widget.hide: art_loading_spinner
+      - lvgl.widget.show: album_art_widget
     on_error:
+      # Download failed — dismiss the spinner and restore the previous artwork.
+      - lvgl.widget.hide: art_loading_spinner
+      - lvgl.widget.show: album_art_widget
       - logger.log:
-          format: "Album art download failed — previous image retained"
+          format: "Album art download failed — previous image restored"
           level: WARN
 
 # ── Home Assistant Sensors ────────────────────────────────────────────────────
@@ -289,7 +336,8 @@ text_sensor:
     internal: true
     on_value:
       then:
-        # Step 1: record the new URL immediately so it is ready when we download.
+        # Step 1: record the new URL and immediately swap to the loading spinner
+        # so the stale artwork is replaced before the download starts.
         # entity_picture is a HA-relative path, e.g.:
         #   "/api/media_player_proxy/media_player.xxx?token=abc&cache=xyz"
         # The cache parameter changes with each track, ensuring a unique URL.
@@ -298,12 +346,14 @@ text_sensor:
               std::string full_url = std::string("${ha_base_url}") + x;
               id(album_art).set_url(full_url.c_str());
             }
+        - lvgl.widget.hide: album_art_widget
+        - lvgl.widget.show: art_loading_spinner
         # Step 2: wait before downloading.
         # HA's media proxy updates entity_picture URL as soon as the track
         # changes, but the proxy itself may not have fetched and cached the
         # new image yet.  Fetching immediately can return the previous track's
-        # artwork.  A short delay lets the proxy catch up before we download.
-        - delay: 1500ms
+        # artwork.  The delay is read from the HA-exposed slider (0–1500 ms).
+        - delay: !lambda "return (uint32_t)id(album_art_delay).state;"
         # Step 3: trigger the HTTP download with the URL set in step 1.
         - lambda: |-
             id(album_art).update();
@@ -322,6 +372,46 @@ text_sensor:
             text:
               format: "%s"
               args: ['id(ha_player_state).state.c_str()']
+        # Backlight / sleep management:
+        # Cancel the auto-off timer and wake the display when playing;
+        # start (or restart) the 30 s countdown when paused, idle, or off.
+        - if:
+            condition:
+              lambda: 'return id(ha_player_state).state == "playing";'
+            then:
+              - script.stop: backlight_timeout
+              - light.turn_on: display_backlight
+              - lvgl.resume:
+            else:
+              - script.execute: backlight_timeout
+
+# ── Script: Backlight Auto-Off ────────────────────────────────────────────────
+# Waits 30 s then turns off the backlight and pauses LVGL rendering.
+# mode: restart resets the countdown each time it is called, so rapid
+# state changes (e.g. paused → idle) don't stack multiple timers.
+script:
+  - id: backlight_timeout
+    mode: restart
+    then:
+      - delay: 30s
+      - light.turn_off: display_backlight
+      - lvgl.pause:
+
+# ── Interval: Clock Display ───────────────────────────────────────────────────
+# Refreshes the header time label every minute.  The is_valid() guard prevents
+# displaying "--:--" from being replaced with garbage before the first HA sync.
+interval:
+  - interval: 60s
+    then:
+      - lambda: |-
+          auto t = id(ha_time).now();
+          if (t.is_valid()) {
+            int h = t.hour % 12;
+            if (h == 0) h = 12;
+            char buf[9];
+            snprintf(buf, sizeof(buf), "%d:%02d %s", h, t.minute, t.hour < 12 ? "AM" : "PM");
+            lv_label_set_text(id(lbl_time), buf);
+          }
 
 # ── LVGL ──────────────────────────────────────────────────────────────────────
 lvgl:
@@ -409,12 +499,14 @@ lvgl:
             flex_align_main: SPACE_BETWEEN   # Push name to left, icon to right
 
           widgets:
-            # Device label — identifies this display on the wall
+            # Device label — expands to fill all remaining space, which pushes
+            # the icon and time labels to the far right of the header.
             - label:
                 text: "${friendly_name}"
                 text_color: 0xffffff
                 text_font: montserrat_14
                 pad_left: 4
+                flex_grow: 1
 
             # HA status icon (Font Awesome Wi-Fi glyph 0xf1eb)
             # Hidden by default; shown/hidden by api.on_client_connected callbacks
@@ -424,6 +516,14 @@ lvgl:
                 text_font: montserrat_14
                 text_color: 0x18bcf2   # Accent cyan matching the state badge
                 hidden: true
+                pad_right: 4
+
+            # Current time — updated every 60 s by the interval component
+            - label:
+                id: lbl_time
+                text: "--:-- --"
+                text_font: montserrat_14
+                text_color: 0xffffff
                 pad_right: 4
 
       # ── Boot splash ────────────────────────────────────────────────────────
@@ -528,6 +628,21 @@ lvgl:
                         align: CENTER
                         radius: 14           # Rounded corners — card-like look
                         clip_corner: true    # Clips the pixel data to the radius boundary
+
+                    # Loading spinner — shown while a new artwork download is in
+                    # progress, hidden once the download finishes or errors out.
+                    - spinner:
+                        id: art_loading_spinner
+                        align: CENTER
+                        height: 60
+                        width: 60
+                        spin_time: 1s
+                        arc_length: 60deg
+                        arc_width: 8
+                        indicator:
+                          arc_color: 0x18bcf2
+                          arc_width: 8
+                        hidden: true
 
               # ── Right panel: Track Information ────────────────────────
               # A FLEX COLUMN container stacks three labels vertically:
