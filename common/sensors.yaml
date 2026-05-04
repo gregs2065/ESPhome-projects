@@ -196,18 +196,6 @@ sensor:
             args: [ 'id(BGE_food3_temp).state' ]
 
 text_sensor:
-  - id: notify_box_msg
-    platform: homeassistant    
-    entity_id: input_text.notification_box_esp_displays
-    internal: true
-    on_value: 
-      then:
-        - lvgl.label.update:
-            id: notify_msg
-            text: 
-              args: ["id(notify_box_msg).state.c_str()"]
-              format: "%s"
-
   - id: dishwasher_lastrun
     platform: homeassistant
     entity_id: input_text.dishwasher_last_run
@@ -298,6 +286,64 @@ text_sensor:
     platform: homeassistant
     entity_id: input_select.dryer_status
     internal: true
+
+  - id: ha_media_title
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: media_title
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: track_title_lbl
+            text:
+              format: "%s"
+              args: ['x.empty() ? "Nothing Playing" : id(ha_media_title).state.c_str()']
+
+  - id: ha_media_artist
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: media_artist
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: artist_name_lbl
+            text:
+              format: "%s"
+              args: ['id(ha_media_artist).state.c_str()']
+
+
+  - id: ha_player_state
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    internal: true
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(ha_player_state).state == "idle";'
+            then:
+              
+              - if:
+                  condition:
+                    lambda: 'return id(media_info_page).skip == false;'
+                    
+                  then:
+                    - lambda: |-
+                        id(media_info_page).skip = true;
+                        ESP_LOGD("main", "SET SKIP TRUE"); 
+              
+            else:
+              - if:
+                  condition:
+                    lambda: 'return id(media_info_page).skip == true;'
+                  then:
+                    - lambda: |-
+                        id(media_info_page).skip = false;
+                        ESP_LOGD("main", "SET SKIP FALSE");
+              
+
 
 
   - platform: wifi_info

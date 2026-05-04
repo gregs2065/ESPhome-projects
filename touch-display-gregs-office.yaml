@@ -1,7 +1,7 @@
 substitutions:
   is480x320: false
-  name: "touch-display-main-floor"
-  friendly_name: "Touch Display - Main Floor"
+  name: "touch-display-gregs-office"
+  friendly_name: "Touch Display - Greg's Office"
   font1: "montserrat_12" #"montserrat_14"
   font2: "montserrat_14" #"montserrat_18"
   font3: "montserrat_16" #"montserrat_30"
@@ -21,3 +21,6 @@ packages:   # as a list
 - !include common/common_elements.yaml
 - !include common/sensors.yaml
 - !include common/lvgl_stuff.yaml
+
+   
+

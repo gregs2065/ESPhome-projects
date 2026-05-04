@@ -1,8 +1,11 @@
 esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
   on_boot:
+    priority: -100    # Low priority ensures Wi-Fi and API are already up before this runs
+    then:
     - script.execute: my_dynamic_script
 
-    
 # Enable Home Assistant API
 api:
   encryption:
@@ -26,17 +29,12 @@ api:
 
 ota:
   - platform: esphome
-    password: "a3e18c67298cfe651d3501bd9b5857fa"
+    password: !secret ota_password
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   domain: .lan
-
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
-  # ap:
-  #   ssid: "Guiton-Template Fallback Hotspot"
-  #   password: "IG6W5c1ddcAO"
 
 captive_portal:
 
@@ -100,19 +98,23 @@ globals:
     type: int
     initial_value: '5'
 
+  - id: hide_mediainfo_page
+    type: bool
+    initial_value: 'true'
+
+  - id: hide_green_egg_page
+    type: bool
+    initial_value: 'true'
 
 image:
   rgb565:
     alpha_channel:
     - file: "images/dogbowl.png"
-      resize: ${"100x100" if is480x320 else "65x65"}
+      resize: ${"100x100" if is480x320 else "80x80"}
       id: dogbowl2
     - file: images/esphome_233905.webp
       id: boot_logo
       resize: ${"200x200" if is480x320 else "150x150"}
-
-
-
   binary:
     - file: mdi:washing-machine
       id: washing_machine
@@ -197,11 +199,6 @@ time:
         then:
           - switch.turn_off: switch_antiburn
 
-
-
-
-
-
 switch:
   - platform: template
     name: Antiburn
@@ -243,8 +240,6 @@ interval:
   - interval: 0.5s
     then:
       - script.execute: dishwasher_running_anim
-
-
 
 script:
   - id: washer_active_icon
@@ -350,42 +345,34 @@ script:
             lambda: 'return !id(page_turn_paused);'
           then:
             - script.execute: page_next_alt
-
   - id: page_next_alt #skips certain pages that are not always active
     then:
       - if:
           condition:
-            and:
-              - lvgl.page.is_showing: dishwasher_page #the page just before green_egg_page
-              - lambda: 'return isnan( id(BGE_cook_temp).state ) && isnan( id(BGE_food1_temp).state ) && isnan( id(BGE_food2_temp).state )  && isnan( id(BGE_food3_temp).state );'
+            - lambda: 'return isnan( id(BGE_cook_temp).state ) && isnan( id(BGE_food1_temp).state ) && isnan( id(BGE_food2_temp).state )  && isnan( id(BGE_food3_temp).state );'
           then:
-            - lvgl.page.show: 
-                id:  outside_page #the page just after green_egg_page  room_page
-                animation: OUT_LEFT
-                time: 300ms
+            - lambda: |-
+                  id(green_egg_page).skip = true;
           else:
-            - lvgl.page.next: 
-                animation: OUT_LEFT
-                time: 300ms
-      
-
+            - lambda: |-
+                  id(green_egg_page).skip = false;
+      - lvgl.page.next: 
+          animation: OUT_LEFT
+          time: 300ms
   - id: page_prev_alt #skips certain pages that are not always active
     then:
       - if:
           condition:
-            and:
-              - lvgl.page.is_showing: outside_page #the page just after green_egg_page 
-              - lambda: 'return isnan( id(BGE_cook_temp).state ) && isnan( id(BGE_food1_temp).state ) && isnan( id(BGE_food2_temp).state )  && isnan( id(BGE_food3_temp).state );'
+            - lambda: 'return isnan( id(BGE_cook_temp).state ) && isnan( id(BGE_food1_temp).state ) && isnan( id(BGE_food2_temp).state )  && isnan( id(BGE_food3_temp).state );'
           then:
-            - lvgl.page.show: 
-                id: dishwasher_page #the page just before green_egg_page
-                animation: OUT_RIGHT
-                time: 300ms
+            - lambda: |-
+                  id(green_egg_page).skip = true;
           else:
-            - lvgl.page.previous: 
-                animation: OUT_RIGHT
-                time: 300ms
-
+            - lambda: |-
+                  id(green_egg_page).skip = false;
+      - lvgl.page.previous: 
+          animation: OUT_RIGHT
+          time: 300ms
   - id: pause_page_turn
     then:
       - globals.set:
@@ -395,7 +382,6 @@ script:
           id: page_turn_timer
           value: "30"
   - id: dishwasher_running_anim
-
     then:
       - if:
           condition:
@@ -411,8 +397,7 @@ script:
                   - delay: 0.5s
                   - lvgl.widget.update: 
                       id: dish_1
-                      image_recolor: 0x0000ff
-      
+                      image_recolor: 0x0000ff 
   - id: my_dynamic_script
     mode: restart # This is crucial to make the script repeat
     then:    
@@ -422,7 +407,6 @@ script:
       - script.execute: page_turn
       - delay: !lambda 'return (id(page_turn_interval) * 1000);'
       - script.execute: my_dynamic_script # Execute the script again to repeat the loop 
-
 
 font:
   - file: "fonts/Montserrat-Bold.ttf"

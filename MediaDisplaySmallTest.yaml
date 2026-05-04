@@ -1,0 +1,641 @@
+# ============================================================
+# MediaDisplaySmallTest.yaml
+# ============================================================
+# An ESPhome configuration that displays media player
+# information from Home Assistant on the CYD (Cheap Yellow
+# Display) ESP32-2432S028R 320x240 resistive touchscreen.
+#
+# Displayed information (per MediaPlayerSmallInfo.md):
+#   - Track Title
+#   - Artist Name
+#   - Album Artwork  (downloaded to SD card, displayed from file)
+#   - Playback State (playing / paused / idle / off / …)
+#   - Progress bar + elapsed/total time (when available)
+#
+# Header bar:
+#   - Device friendly name (left)
+#   - HA connection icon  (hidden until HA connects)
+#   - Current time        (rightmost)
+#
+# Hardware (from common/CYD-2432S028R.yaml / touch-display-gregs-office.yaml):
+#   - ESP32dev, standard SPI ILI9341 320x240 display (rotation: 90)
+#   - XPT2046 resistive touchscreen
+#   - LEDC PWM backlight on GPIO21
+#   - Micro SD card on the LCD SPI bus (GPIO14/13/12), CS on GPIO5
+#
+# Album art:
+#   The CYD has no PSRAM.  Rather than buffering the full JPEG in heap,
+#   the firmware streams the download straight to the SD card (only ~2 KB
+#   of RAM needed for the chunk buffer), then hands the on-disk file to
+#   LVGL's built-in TJPGD decoder which reads and decodes it in-place.
+#
+# Backlight:
+#   Defaults to ON at boot (ALWAYS_ON restore mode), exposed to
+#   Home Assistant as a dimmable light entity.  Auto-off 30 s
+#   after playback stops.  Touch-to-wake resumes the display.
+#
+# Customise the substitutions marked below before flashing.
+# ============================================================
+
+esphome:
+  name: media-display-small-test
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: -100    # After Wi-Fi and API are up
+    then:
+      - lambda: |-
+          // ── Mount SD card ──────────────────────────────────────────────────
+          // The CYD's SD slot shares the LCD SPI bus (SPI2_HOST, HSPI default
+          // pins GPIO14/13/12); the SD card CS is GPIO5.
+          sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+          host.slot = SPI2_HOST;
+
+          sdspi_device_config_t slot = SDSPI_DEVICE_CONFIG_DEFAULT();
+          slot.gpio_cs  = GPIO_NUM_5;
+          slot.host_id  = SPI2_HOST;
+
+          esp_vfs_fat_sdmmc_mount_config_t mcfg = {};
+          mcfg.format_if_mount_failed = false;
+          mcfg.max_files              = 3;
+
+          sdmmc_card_t *card;
+          esp_err_t ret = esp_vfs_fat_sdspi_mount(
+              "/sdcard", &host, &slot, &mcfg, &card);
+          if (ret != ESP_OK)
+            ESP_LOGE("sd", "SD mount failed: %s", esp_err_to_name(ret));
+          else
+            ESP_LOGI("sd", "SD card mounted");
+
+          // ── Register LVGL POSIX filesystem driver ──────────────────────────
+          // Enables image widgets to load files via the 'S' drive letter,
+          // e.g. "S:/sdcard/art.jpg".  lv_fs_posix_init() requires
+          // LV_USE_FS_POSIX=1 (set in platformio_options below).
+          lv_fs_posix_init();
+
+# ── Processor ─────────────────────────────────────────────────────────────────
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# Enable LVGL's POSIX filesystem driver (for reading image files from SD) and
+# its built-in TJPGD JPEG decoder.  The drive letter 83 == ASCII 'S'.
+# These must be set before LVGL is compiled; platformio build_flags arrive
+# before any generated lv_conf.h defines so #ifndef guards let them through.
+platformio_options:
+  build_flags:
+    - -DLV_USE_FS_POSIX=1
+    - -DLV_FS_POSIX_LETTER=83
+    - -DLV_USE_TJPGD=1
+
+# ── Substitutions ─────────────────────────────────────────────────────────────
+substitutions:
+  friendly_name: "Media Display Small Test"
+
+  # ┌─ Customise these before flashing ────────────────────────────────────────
+  media_player_entity: "media_player.mainfloor_pi"
+
+  # Base URL of your HA instance (no trailing slash)
+  ha_base_url: "http://bender.lan:8123"
+  # └──────────────────────────────────────────────────────────────────────────
+
+# ── Globals ───────────────────────────────────────────────────────────────────
+globals:
+  - id: art_url
+    type: std::string
+    restore_value: false
+    initial_value: '""'
+
+# ── Connectivity ──────────────────────────────────────────────────────────────
+api:
+  encryption:
+    key: !secret api_encryption_key
+  on_client_connected:
+    - lvgl.widget.hide: boot_screen
+    - logger.log:
+        format: "API client connected: %s from %s"
+        args: ["client_info.c_str()", "client_address.c_str()"]
+    - if:
+        condition:
+          lambda: 'return (0 == client_info.find("Home Assistant "));'
+        then:
+          - lvgl.widget.show: lbl_hastatus
+  on_client_disconnected:
+    - if:
+        condition:
+          lambda: 'return (0 == client_info.find("Home Assistant "));'
+        then:
+          - lvgl.widget.hide: lbl_hastatus
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: .lan
+
+captive_portal:
+
+logger:
+
+# ── Time: Clock Source ────────────────────────────────────────────────────────
+time:
+  - platform: homeassistant
+    id: ha_time
+
+# ── Hardware: SPI Buses ───────────────────────────────────────────────────────
+spi:
+  - id: lcd
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+  - id: touch_bus
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+# ── Hardware: Backlight ───────────────────────────────────────────────────────
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: backlight_output
+
+light:
+  - platform: monochromatic
+    output: backlight_output
+    name: "Display Backlight"
+    restore_mode: ALWAYS_ON
+    id: display_backlight
+
+# ── Hardware: ILI9341 Display ─────────────────────────────────────────────────
+display:
+  - platform: ili9xxx
+    model: ILI9341
+    spi_id: lcd
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    id: my_display
+    rotation: 90
+    data_rate: 40MHz
+    invert_colors: false
+    dimensions: 240x320
+    auto_clear_enabled: false
+    update_interval: never
+
+# ── Hardware: XPT2046 Resistive Touchscreen ───────────────────────────────────
+touchscreen:
+  platform: xpt2046
+  spi_id: touch_bus
+  cs_pin: GPIO33
+  update_interval: 50ms
+  calibration:
+    x_min: 280
+    x_max: 3860
+    y_min: 340
+    y_max: 3860
+  transform:
+    mirror_x: false
+    mirror_y: false
+    swap_xy: true
+  on_release:
+    then:
+      - if:
+          condition: lvgl.is_paused
+          then:
+            - light.turn_on: display_backlight
+            - lvgl.resume:
+            - lvgl.widget.redraw:
+            - if:
+                condition:
+                  lambda: 'return id(ha_player_state).state != "playing";'
+                then:
+                  - script.execute: backlight_timeout
+
+# ── Home Assistant Sensors ────────────────────────────────────────────────────
+text_sensor:
+  - id: ha_media_title
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: media_title
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: track_title_lbl
+            text:
+              format: "%s"
+              args: ['x.empty() ? "Nothing Playing" : id(ha_media_title).state.c_str()']
+
+  - id: ha_media_artist
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: media_artist
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: artist_name_lbl
+            text:
+              format: "%s"
+              args: ['id(ha_media_artist).state.c_str()']
+
+  # ── Album Artwork URL ────────────────────────────────────────────────────────
+  # entity_picture changes with every track (new cache token in the query string).
+  # We store the full URL and kick off the SD-card download script.
+  - id: ha_entity_picture
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: entity_picture
+    internal: true
+    on_value:
+      then:
+        - lambda: |-
+            if (!x.empty())
+              id(art_url) = std::string("${ha_base_url}") + x;
+        - script.execute: download_art
+
+  - id: ha_player_state
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: playback_state_lbl
+            text:
+              format: "%s"
+              args: ['id(ha_player_state).state.c_str()']
+        - if:
+            condition:
+              lambda: 'return id(ha_player_state).state == "playing";'
+            then:
+              - script.stop: backlight_timeout
+              - light.turn_on: display_backlight
+              - lvgl.resume:
+            else:
+              - script.execute: backlight_timeout
+
+sensor:
+  - id: ha_media_duration
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: media_duration
+    internal: true
+    on_value:
+      then:
+        - script.execute: update_progress
+
+  - id: ha_media_position
+    platform: homeassistant
+    entity_id: ${media_player_entity}
+    attribute: media_position
+    internal: true
+    on_value:
+      then:
+        - script.execute: update_progress
+
+# ── Scripts ───────────────────────────────────────────────────────────────────
+script:
+  # ── Backlight auto-off ────────────────────────────────────────────────────
+  - id: backlight_timeout
+    mode: restart
+    then:
+      - delay: 30s
+      - light.turn_off: display_backlight
+      - lvgl.pause:
+
+  # ── Album art: download to SD, then display ───────────────────────────────
+  # mode: restart cancels any in-flight download when the track changes again.
+  - id: download_art
+    mode: restart
+    then:
+      - lvgl.widget.hide: album_art_widget
+      - lvgl.widget.show: art_loading_spinner
+      - lambda: |-
+          std::string url = id(art_url);
+          if (url.empty()) {
+            ESP_LOGW("art", "No URL — skipping download");
+            return;
+          }
+
+          // ── Stream JPEG to SD card ────────────────────────────────────────
+          // Only ~2 KB of RAM used for the chunk buffer; the full file lives
+          // on the SD card, not in heap.
+          esp_http_client_config_t cfg = {};
+          cfg.url        = url.c_str();
+          cfg.timeout_ms = 10000;
+
+          esp_http_client_handle_t client = esp_http_client_init(&cfg);
+          if (esp_http_client_open(client, 0) != ESP_OK) {
+            ESP_LOGE("art", "HTTP open failed");
+            esp_http_client_cleanup(client);
+            lv_obj_add_flag(id(art_loading_spinner), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(album_art_widget), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          esp_http_client_fetch_headers(client);
+
+          FILE *f = fopen("/sdcard/art.jpg", "wb");
+          if (!f) {
+            ESP_LOGE("art", "SD write open failed");
+            esp_http_client_cleanup(client);
+            lv_obj_add_flag(id(art_loading_spinner), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(album_art_widget), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+
+          char buf[2048];
+          int n;
+          while ((n = esp_http_client_read(client, buf, sizeof(buf))) > 0)
+            fwrite(buf, 1, n, f);
+          fclose(f);
+          esp_http_client_cleanup(client);
+          ESP_LOGI("art", "Download complete → /sdcard/art.jpg");
+
+          // ── Point LVGL image widget at the new file ───────────────────────
+          // LVGL's TJPGD decoder reads and decodes the JPEG directly from the
+          // SD card file via the POSIX fs driver registered in on_boot.
+          lv_img_set_src(id(album_art_widget), "S:/sdcard/art.jpg");
+          lv_obj_add_flag(id(art_loading_spinner), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_clear_flag(id(album_art_widget), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_invalidate(id(album_art_widget));
+
+  # ── Progress bar update ───────────────────────────────────────────────────
+  - id: update_progress
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return !isnan(id(ha_media_duration).state)
+                  && id(ha_media_duration).state > 0
+                  && !isnan(id(ha_media_position).state);
+          then:
+            - lambda: |-
+                int pct = (int)(id(ha_media_position).state
+                                / id(ha_media_duration).state * 100.0f);
+                lv_bar_set_value(id(progress_bar), pct, LV_ANIM_OFF);
+                int pos = (int)id(ha_media_position).state;
+                int dur = (int)id(ha_media_duration).state;
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d:%02d / %d:%02d",
+                         pos / 60, pos % 60, dur / 60, dur % 60);
+                lv_label_set_text(id(progress_time_lbl), buf);
+            - lvgl.widget.show: progress_bar
+            - lvgl.widget.show: progress_time_lbl
+          else:
+            - lvgl.widget.hide: progress_bar
+            - lvgl.widget.hide: progress_time_lbl
+
+# ── Interval: Clock Display ───────────────────────────────────────────────────
+interval:
+  - interval: 60s
+    then:
+      - lambda: |-
+          auto t = id(ha_time).now();
+          if (t.is_valid()) {
+            int h = t.hour % 12;
+            if (h == 0) h = 12;
+            char buf[9];
+            snprintf(buf, sizeof(buf), "%d:%02d %s",
+                     h, t.minute, t.hour < 12 ? "AM" : "PM");
+            lv_label_set_text(id(lbl_time), buf);
+          }
+
+# ── LVGL ──────────────────────────────────────────────────────────────────────
+lvgl:
+  displays:
+    - my_display
+
+  buffer_size: 10%
+
+  style_definitions:
+    - id: header_style
+      bg_color: 0x1a1a2e
+      bg_opa: COVER
+      text_color: 0xffffff
+      text_font: montserrat_12
+      width: 100%
+      height: 30
+      y: 0
+      pad_all: 4
+      border_width: 0
+      radius: 0
+
+    - id: art_panel_style
+      bg_color: 0x0f3460
+      border_width: 0
+      radius: 0
+      pad_all: 0
+      scrollbar_mode: "OFF"
+
+    - id: info_panel_style
+      bg_color: 0x16213e
+      border_width: 0
+      radius: 0
+      pad_left: 10
+      pad_top: 12
+      pad_right: 6
+      pad_bottom: 8
+      scrollbar_mode: "OFF"
+
+    - id: title_label_style
+      text_color: 0xffffff
+      text_font: montserrat_18
+      bg_opa: TRANSP
+      border_width: 0
+
+    - id: artist_label_style
+      text_color: 0xaaaacc
+      text_font: montserrat_14
+      bg_opa: TRANSP
+      border_width: 0
+
+    - id: state_label_style
+      text_color: 0x18bcf2
+      text_font: montserrat_12
+      bg_opa: TRANSP
+      border_width: 0
+
+  top_layer:
+    widgets:
+      # ── Header bar ──────────────────────────────────────────────────────────
+      - obj:
+          styles: header_style
+          align: TOP_LEFT
+          layout:
+            type: flex
+            flex_flow: ROW
+            flex_align_cross: CENTER
+            flex_align_main: SPACE_BETWEEN
+          widgets:
+            - label:
+                text: "${friendly_name}"
+                text_color: 0xffffff
+                text_font: montserrat_12
+                pad_left: 4
+                flex_grow: 1
+            - label:
+                id: lbl_hastatus
+                text: "\uf1eb"
+                text_font: montserrat_12
+                text_color: 0x18bcf2
+                hidden: true
+                pad_right: 4
+            - label:
+                id: lbl_time
+                text: "--:-- --"
+                text_font: montserrat_12
+                text_color: 0xffffff
+                pad_right: 4
+
+      # ── Boot splash ─────────────────────────────────────────────────────────
+      - obj:
+          id: boot_screen
+          x: 0
+          y: 0
+          width: 100%
+          height: 100%
+          bg_color: 0x1a1a2e
+          bg_opa: COVER
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          widgets:
+            - label:
+                align: CENTER
+                text: "Media Display"
+                text_color: 0xffffff
+                text_font: montserrat_18
+                y: -30
+            - label:
+                align: CENTER
+                text: "Connecting to Home Assistant..."
+                text_color: 0xaaaacc
+                text_font: montserrat_12
+                y: 8
+            - spinner:
+                align: CENTER
+                y: 55
+                height: 40
+                width: 40
+                spin_time: 1s
+                arc_length: 60deg
+                arc_width: 6
+                indicator:
+                  arc_color: 0x18bcf2
+                  arc_width: 6
+          on_press:
+            - lvgl.widget.hide: boot_screen
+
+  pages:
+    # ── Media Page ─────────────────────────────────────────────────────────
+    #
+    #  ┌──────────────────┬──────────────────────────────────────────────────┐
+    #  │                  │  Track Title  (montserrat_18, wrapping)          │
+    #  │   [Album Art]    │  Artist Name  (montserrat_14, muted)             │
+    #  │  loaded from SD  │  ● playing    (state badge, accent cyan)         │
+    #  │                  │  ████████░░  0:45 / 3:12   (hidden when N/A)    │
+    #  └──────────────────┴──────────────────────────────────────────────────┘
+    #        140 px                          180 px
+    - id: media_page
+      bg_color: 0x16213e
+      widgets:
+        - obj:
+            x: 0
+            y: 30
+            width: 320
+            height: 210
+            bg_color: 0x16213e
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            scrollbar_mode: "OFF"
+            layout:
+              type: flex
+              flex_flow: ROW
+              flex_align_cross: CENTER
+              flex_align_main: START
+
+            widgets:
+              # ── Left panel: Album Artwork ──────────────────────────────
+              - obj:
+                  styles: art_panel_style
+                  width: 140
+                  height: 210
+                  widgets:
+                    # Image source is set at runtime via lv_img_set_src()
+                    # once the first download to /sdcard/art.jpg completes.
+                    - image:
+                        id: album_art_widget
+                        src: "S:/sdcard/art.jpg"
+                        align: CENTER
+                        radius: 10
+                        clip_corner: true
+                        hidden: true   # Hidden until first download succeeds
+
+                    - spinner:
+                        id: art_loading_spinner
+                        align: CENTER
+                        height: 44
+                        width: 44
+                        spin_time: 1s
+                        arc_length: 60deg
+                        arc_width: 6
+                        indicator:
+                          arc_color: 0x18bcf2
+                          arc_width: 6
+
+              # ── Right panel: Track Information ─────────────────────────
+              - obj:
+                  styles: info_panel_style
+                  width: 180
+                  height: 210
+                  layout:
+                    type: flex
+                    flex_flow: COLUMN
+                    flex_align_cross: START
+                    flex_align_main: CENTER
+                  widgets:
+                    - label:
+                        id: track_title_lbl
+                        styles: title_label_style
+                        text: "Nothing Playing"
+                        long_mode: WRAP
+                        width: 100%
+
+                    - label:
+                        id: artist_name_lbl
+                        styles: artist_label_style
+                        text: ""
+                        long_mode: WRAP
+                        width: 100%
+
+                    - label:
+                        id: playback_state_lbl
+                        styles: state_label_style
+                        text: "idle"
+                        pad_top: 8
+
+                    - bar:
+                        id: progress_bar
+                        width: 100%
+                        height: 8
+                        pad_top: 10
+                        min_value: 0
+                        max_value: 100
+                        value: 0
+                        hidden: true
+                        indicator:
+                          bg_color: 0x18bcf2
+                        bg_color: 0x2a2a4a
+
+                    - label:
+                        id: progress_time_lbl
+                        text_color: 0x888899
+                        text_font: montserrat_12
+                        bg_opa: TRANSP
+                        border_width: 0
+                        text: ""
+                        hidden: true
