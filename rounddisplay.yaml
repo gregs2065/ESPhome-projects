@@ -66,7 +66,7 @@ time:
               text: 
                 time_format: "%H:%M:%S"
                 time: esptime
-      - hours: 0
+      - minutes: 0
         then:
           - lvgl.label.update:
               id: date_widget
@@ -75,36 +75,36 @@ time:
                 time: esptime
 
 text_sensor:
-  - platform: homeassistant
-    id: music_state
-    entity_id: $mediaplayer
-  - platform: homeassistant
-    id: track_name
-    entity_id: $mediaplayer
-    attribute: media_title
-    on_value:
-      then:
-        - lvgl.label.update:
-            id: track_name_widget
-            text: !lambda return id(track_name).state;
-  - platform: homeassistant
-    id: track_artist
-    entity_id: $mediaplayer
-    attribute: media_artist
-    on_value:
-      then:
-        - lvgl.label.update:
-            id: track_artist_widget
-            text: !lambda return id(track_artist).state;
-  - platform: homeassistant
-    id: track_album
-    entity_id: $mediaplayer
-    attribute: media_album_name
-    on_value:
-      then:
-        - lvgl.label.update:
-            id: track_album_widget
-            text: !lambda return id(track_album).state;
+  # - platform: homeassistant
+  #   id: music_state
+  #   entity_id: $mediaplayer
+  # - platform: homeassistant
+  #   id: track_name
+  #   entity_id: $mediaplayer
+  #   attribute: media_title
+  #   on_value:
+  #     then:
+  #       - lvgl.label.update:
+  #           id: track_name_widget
+  #           text: !lambda return id(track_name).state;
+  # - platform: homeassistant
+  #   id: track_artist
+  #   entity_id: $mediaplayer
+  #   attribute: media_artist
+  #   on_value:
+  #     then:
+  #       - lvgl.label.update:
+  #           id: track_artist_widget
+  #           text: !lambda return id(track_artist).state;
+  # - platform: homeassistant
+  #   id: track_album
+  #   entity_id: $mediaplayer
+  #   attribute: media_album_name
+  #   on_value:
+  #     then:
+  #       - lvgl.label.update:
+  #           id: track_album_widget
+  #           text: !lambda return id(track_album).state;
 
 sensor:
   - platform: homeassistant
@@ -117,24 +117,24 @@ sensor:
             text: 
               format: "%.1f°"
               args: [ 'id(outside_temp).get_state()' ]
-  - platform: homeassistant
-    id: media_player_volume
-    entity_id: $mediaplayer
-    attribute: volume_level
-    on_value:
-      - lvgl.arc.update:
-          id: volume_control_widget
-          value: !lambda return (x * 100);
+  # - platform: homeassistant
+  #   id: media_player_volume
+  #   entity_id: $mediaplayer
+  #   attribute: volume_level
+  #   on_value:
+  #     - lvgl.arc.update:
+  #         id: volume_control_widget
+  #         value: !lambda return (x * 100);
 
 binary_sensor:
   - platform: template
     id: is_playing
-    lambda: 'return id(music_state).state == "playing";'
+    # lambda: 'return id(music_state).state == "playing";'
     filters:
       - delayed_off: 1300ms
     on_press:
       then:
-        - lvgl.page.show: media_player_page
+        # - lvgl.page.show: media_player_page
     on_release:
       then:
         - lvgl.page.show: time_page
@@ -198,12 +198,12 @@ touchscreen:
     interrupt_pin: $tint
     on_update:
       - script.execute: screentime
-      - lambda: |-
-            for (auto touch: touches)  {
-                if (touch.state <= 2) {
-                  ESP_LOGI("Touch points:", "id=%d x=%d, y=%d", touch.id, touch.x, touch.y);
-                }
-            }
+      # - lambda: |-
+      #       for (auto touch: touches)  {
+      #           if (touch.state <= 2) {
+      #             ESP_LOGI("Touch points:", "id=%d x=%d, y=%d", touch.id, touch.x, touch.y);
+      #           }
+      #       }
 
 lvgl:
   buffer_size: 25%
@@ -239,45 +239,3 @@ lvgl:
             text: 
               format: "%.1f°"
               args: [ id(outside_temp).get_state() ]
-    - id: media_player_page
-      widgets:
-        - label:
-            id: track_name_widget
-            text_font: roboto
-            align: CENTER
-            max_width: 80%
-            width: 80%
-            text_align: CENTER
-            long_mode: DOT
-            y: -25
-        - label:
-            id: track_artist_widget
-            text_font: roboto
-            align: CENTER
-            max_width: 90%
-            width: 90%
-            text_align: CENTER
-            long_mode: DOT
-            y: 0
-        - label:
-            id: track_album_widget
-            text_font: roboto
-            align: CENTER
-            max_width: 80%
-            width: 80%
-            text_align: CENTER
-            long_mode: DOT
-            y: 25
-        - arc:
-            id: volume_control_widget
-            adv_hittest: true
-            align: CENTER
-            width: 90%
-            height: 90%
-            adjustable: true
-            on_release:
-                - homeassistant.action:
-                    action: media_player.volume_set
-                    data:
-                      entity_id: $mediaplayer
-                      volume_level: !lambda return (x / 100);
