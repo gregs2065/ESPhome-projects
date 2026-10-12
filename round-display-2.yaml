@@ -59,3 +59,17 @@ light:
     icon: "mdi:brightness-7"
     restore_mode: ALWAYS_ON
     output: backlight_output
+
+i2c:
+  - id: i2c_bus
+    scl: 5
+    sda: 4
+    scan: true
+
+touchscreen:
+  - platform: cst816
+    id: lcd_touch
+    i2c_id: i2c_bus
+    display: lcd_display
+    interrupt_pin: 0
+    reset_pin: 1
