@@ -28,3 +28,33 @@ wifi:
     password: "P3EbPRg2gGTG"
 
 captive_portal:
+
+spi:
+  - id: lcd_spi
+    clk_pin: 6
+    mosi_pin: 7
+
+display:
+  - platform: mipi_spi
+    id: lcd_display
+    spi_id: lcd_spi
+    model: ESP32-2424S012
+    cs_pin: 10
+    dc_pin:
+      ignore_strapping_warning: true
+      number: 2
+    show_test_card: true
+
+output:
+  - platform: ledc
+    id: backlight_output
+    pin: 3
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    name: Display Backlight
+    id: display_backlight
+    icon: "mdi:brightness-7"
+    restore_mode: ALWAYS_ON
+    output: backlight_output
