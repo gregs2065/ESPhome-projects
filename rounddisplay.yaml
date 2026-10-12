@@ -2,7 +2,7 @@ substitutions:
   devicename: round-display
   friendname: Round Display
   mediaplayer: media_player.home_theater # Replace with a suitable media player entity you want to control
-  weather: sensor.my_weather_station_temp_1 # Replace with a suitable weather entity from your home assistant
+  weather: sensor.outside_temp # Replace with a suitable weather entity from your home assistant
   screensaver: 5 min # Timeout for how long the screen should stay on after the last interaction
   sdapin: GPIO4
   sclpin: GPIO5
