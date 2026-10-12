@@ -313,7 +313,6 @@ lvgl:
                     action: input_number.set_value
                     data:
                       entity_id: $chiller_temp
-                    data_template:
                       value: !lambda 'return to_string(lv_arc_get_value(id(chiller_arc)));'
         - label:
             align: CENTER
