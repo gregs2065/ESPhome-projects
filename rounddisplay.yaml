@@ -147,16 +147,16 @@ binary_sensor:
   - platform: homeassistant
     id: bed_chiller_state
     entity_id: $chiller
-    on_state:
-      then:
-        - lvgl.widget.update:
-            id: chiller_button
-            state:
-              checked: !lambda return x;
-        - lvgl.label.update:
-            id: chiller_button_label
-            text: !lambda |-
-              return x ? "ON" : "OFF";
+    # on_state:
+    #   then:
+    #     - lvgl.widget.update:
+    #         id: chiller_button
+    #         state:
+    #           checked: !lambda return x;
+    #     - lvgl.label.update:
+    #         id: chiller_button_label
+    #         text: !lambda |-
+    #           return x ? "ON" : "OFF";
 
 script:
   - id: screentime
