@@ -68,13 +68,13 @@ time:
         then:
           - lvgl.label.update:
               id: time_widget
-              text_font: roboto16
+              text_font: roboto18
               text: 
                 time_format: "%H:%M:%S"
                 time: esptime
           - lvgl.label.update:
               id: date_widget
-              text_font: roboto16
+              text_font: roboto18
               text: 
                 time_format: "%A %b %d"
                 time: esptime
