@@ -1,7 +1,7 @@
 substitutions:
   devicename: round-display
   friendname: Round Display
-  mediaplayer: media_player.home_theater # Replace with a suitable media player entity you want to control
+  chiller: input_boolean.bed_chiller_power_greg # Replace with the Home Assistant switch entity for your bed chiller
   weather: sensor.outside_temp # Replace with a suitable weather entity from your home assistant
   screensaver: 5 min # Timeout for how long the screen should stay on after the last interaction
   sdapin: GPIO4
@@ -144,6 +144,20 @@ binary_sensor:
       then:
         - lvgl.page.show: time_page
 
+  - platform: homeassistant
+    id: bed_chiller_state
+    entity_id: $chiller
+    on_state:
+      then:
+        - lvgl.widget.update:
+            id: chiller_button
+            state:
+              checked: !lambda return x;
+        - lvgl.label.update:
+            id: chiller_button_label
+            text: !lambda |-
+              return x ? "ON" : "OFF";
+
 script:
   - id: screentime
     mode: restart
@@ -246,3 +260,48 @@ lvgl:
             text: 
               format: "%.1f°"
               args: [ id(outside_temp).get_state() ]
+
+    - id: bed_chiller_page
+      widgets:
+        - label:
+            align: CENTER
+            y: -85
+            text_font: roboto18
+            text: "Bed Chiller"
+        # On/off button (checkable = stays pressed when ON)
+        - button:
+            id: chiller_button
+            align: CENTER
+            y: -10
+            width: 120
+            height: 70
+            checkable: true
+            widgets:
+              - label:
+                  id: chiller_button_label
+                  align: CENTER
+                  text_font: roboto36
+                  text: "OFF"
+            # Toggle the Home Assistant switch; the button state is then
+            # confirmed/corrected by the bed_chiller_state binary_sensor above.
+            on_short_click:
+              then:
+                - homeassistant.action:
+                    action: switch.toggle
+                    data:
+                      entity_id: $chiller
+        # Back to the main page
+        - button:
+            id: chiller_back_button
+            align: CENTER
+            y: 50
+            width: 80
+            height: 36
+            widgets:
+              - label:
+                  align: CENTER
+                  text_font: roboto18
+                  text: "Back"
+            on_short_click:
+              then:
+                - lvgl.page.show: time_page
