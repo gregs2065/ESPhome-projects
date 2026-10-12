@@ -108,7 +108,7 @@ text_sensor:
 
 sensor:
   - platform: homeassistant
-    id: outdoor_temperature
+    id: outside_temp
     entity_id: $weather
     on_value: 
       then:
@@ -116,7 +116,7 @@ sensor:
             id: temp_widget
             text: 
               format: "%.1f°"
-              args: [ 'id(outdoor_temperature).get_state()' ]
+              args: [ 'id(outside_temp).get_state()' ]
   - platform: homeassistant
     id: media_player_volume
     entity_id: $mediaplayer
@@ -238,7 +238,7 @@ lvgl:
             y: -100
             text: 
               format: "%.1f°"
-              args: [ id(outdoor_temperature).get_state() ]
+              args: [ id(outside_temp).get_state() ]
     - id: media_player_page
       widgets:
         - label:
