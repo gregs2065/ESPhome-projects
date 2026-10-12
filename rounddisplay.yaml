@@ -49,7 +49,7 @@ logger:
 
 font:
   - file: "gfonts://roboto"
-    id: roboto18
+    id: roboto
     size: 18
     glyphsets:
       - GF_Latin_Kernel
@@ -238,7 +238,7 @@ lvgl:
             align: CENTER
             id: temp_widget
             y: -100
-            text_font: roboto18
+            text_font: roboto
             text: 
               format: "%.1f°"
               args: [ id(outside_temp).get_state() ]
