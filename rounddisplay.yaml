@@ -156,7 +156,7 @@ binary_sensor:
         - lvgl.label.update:
             id: chiller_button_label
             text: !lambda |-
-              return x ? "ON" : "OFF";
+              return std::string(x ? "ON" : "OFF");
 
 script:
   - id: screentime
