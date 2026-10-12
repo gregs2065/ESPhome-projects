@@ -43,6 +43,7 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  domain: .lan
 
 logger:
 
