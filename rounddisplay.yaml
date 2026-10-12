@@ -48,12 +48,11 @@ wifi:
 logger:
 
 font:
-  - file: "gfonts://roboto"
+  - file: "gfonts://Roboto"
     id: roboto
     size: 18
     glyphsets:
       - GF_Latin_Kernel
-
 
 time:
   - platform: sntp
@@ -64,13 +63,11 @@ time:
         then:
           - lvgl.label.update:
               id: time_widget
-              text_font: roboto18
               text: 
                 time_format: "%H:%M:%S"
                 time: esptime
           - lvgl.label.update:
               id: date_widget
-              text_font: roboto18
               text: 
                 time_format: "%A %b %d"
                 time: esptime
@@ -238,7 +235,6 @@ lvgl:
             align: CENTER
             id: temp_widget
             y: -100
-            text_font: roboto
             text: 
               format: "%.1f°"
               args: [ id(outside_temp).get_state() ]
