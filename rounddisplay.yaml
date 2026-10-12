@@ -66,8 +66,6 @@ time:
               text: 
                 time_format: "%H:%M:%S"
                 time: esptime
-      - cron: '* * * * * *'
-        then:
           - lvgl.label.update:
               id: date_widget
               text: 
