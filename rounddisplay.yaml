@@ -28,7 +28,7 @@ esphome:
         - script.execute: screentime
         # Swipe down on the main page -> MBR lights page
         - lambda: |-
-            lv_obj_add_event_cb(id(time_page), [](lv_event_t *e) {
+            lv_obj_add_event_cb(id(time_page)->obj, [](lv_event_t *e) {
               if (lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_BOTTOM) {
                 id(show_lights_page).execute();
               }
