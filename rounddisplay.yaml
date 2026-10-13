@@ -689,7 +689,7 @@ lvgl:
         - slider:
             id: mbr_group_slider
             align: CENTER
-            y: -30
+            y: -10
             width: 150
             height: 14
             min_value: 0
@@ -705,7 +705,7 @@ lvgl:
         - button:
             id: office_button
             align: CENTER
-            y: 30
+            y: 45
             width: 150
             height: 40
             checkable: true
