@@ -3,6 +3,9 @@ substitutions:
   friendname: Round Display
   mediaplayer: media_player.home_theater # Replace with a suitable media player entity you want to control
   chiller_temp: input_number.bed_chiller_temp_greg # Bed chiller setpoint (70-90 F)
+  light_prox: light.keypad_with_dimmer_49_f4_2e_main
+  light_med: light.micro_dimmer_55_94_bd
+  light_dist: light.keypad_dimmer_56_7b_21_main
   weather: sensor.outside_temp # Replace with a suitable weather entity from your home assistant
   chiller: input_boolean.bed_chiller_power_greg # Replace with the Home Assistant switch entity for your bed chiller
   screensaver: 5 min # Timeout for how long the screen should stay on after the last interaction
@@ -114,6 +117,49 @@ sensor:
             text:
               format: "%.0f°"
               args: [ 'x' ]
+  # MBR light brightness (HA reports 0-255) -> sliders 0-100
+  - platform: homeassistant
+    id: light_prox_brightness
+    entity_id: $light_prox
+    attribute: brightness
+    on_value:
+      then:
+        - lvgl.slider.update:
+            id: prox_slider
+            value: !lambda 'return std::isnan(x) ? 0 : (int) roundf(x * 100.0f / 255.0f);'
+        - lvgl.label.update:
+            id: prox_label
+            text:
+              format: "prox %.0f%%"
+              args: [ 'std::isnan(x) ? 0.0f : roundf(x * 100.0f / 255.0f)' ]
+  - platform: homeassistant
+    id: light_med_brightness
+    entity_id: $light_med
+    attribute: brightness
+    on_value:
+      then:
+        - lvgl.slider.update:
+            id: med_slider
+            value: !lambda 'return std::isnan(x) ? 0 : (int) roundf(x * 100.0f / 255.0f);'
+        - lvgl.label.update:
+            id: med_label
+            text:
+              format: "med %.0f%%"
+              args: [ 'std::isnan(x) ? 0.0f : roundf(x * 100.0f / 255.0f)' ]
+  - platform: homeassistant
+    id: light_dist_brightness
+    entity_id: $light_dist
+    attribute: brightness
+    on_value:
+      then:
+        - lvgl.slider.update:
+            id: dist_slider
+            value: !lambda 'return std::isnan(x) ? 0 : (int) roundf(x * 100.0f / 255.0f);'
+        - lvgl.label.update:
+            id: dist_label
+            text:
+              format: "dist %.0f%%"
+              args: [ 'std::isnan(x) ? 0.0f : roundf(x * 100.0f / 255.0f)' ]
   # - platform: homeassistant
   #   id: media_player_volume
   #   entity_id: $mediaplayer
@@ -152,7 +198,75 @@ binary_sensor:
             text: !lambda |-
               return std::string(x ? "ON" : "OFF");
 
+  # MBR lights: on/off state, so the sliders drop to 0 when a light is turned off
+  - platform: homeassistant
+    id: light_prox_state
+    entity_id: $light_prox
+    on_state:
+      then:
+        - if:
+            condition:
+              lambda: 'return !x;'
+            then:
+              - lvgl.slider.update:
+                  id: prox_slider
+                  value: 0
+              - lvgl.label.update:
+                  id: prox_label
+                  text: "prox 0%"
+  - platform: homeassistant
+    id: light_med_state
+    entity_id: $light_med
+    on_state:
+      then:
+        - if:
+            condition:
+              lambda: 'return !x;'
+            then:
+              - lvgl.slider.update:
+                  id: med_slider
+                  value: 0
+              - lvgl.label.update:
+                  id: med_label
+                  text: "med 0%"
+  - platform: homeassistant
+    id: light_dist_state
+    entity_id: $light_dist
+    on_state:
+      then:
+        - if:
+            condition:
+              lambda: 'return !x;'
+            then:
+              - lvgl.slider.update:
+                  id: dist_slider
+                  value: 0
+              - lvgl.label.update:
+                  id: dist_label
+                  text: "dist 0%"
+
 script:
+  # Set a light's brightness (0 = off). Called when a slider is released.
+  - id: set_light
+    mode: restart
+    parameters:
+      entity: string
+      level: int
+    then:
+      - if:
+          condition:
+            lambda: 'return level > 0;'
+          then:
+            - homeassistant.action:
+                action: light.turn_on
+                data:
+                  entity_id: !lambda 'return entity;'
+                  brightness_pct: !lambda 'return to_string(level);'
+          else:
+            - homeassistant.action:
+                action: light.turn_off
+                data:
+                  entity_id: !lambda 'return entity;'
   - id: screentime
     mode: restart
     then:
@@ -233,15 +347,25 @@ lvgl:
             text: 
               time_format: "%l:%M:%S" # "%l:%M:%S %p"
               time: esptime
-
-
-            
-            
             # Tap the time to open the bed chiller page
             on_short_click:
               then:
                 - lvgl.page.show: bed_chiller_page
-        # Time and date now live on the main page only
+        # Button to open the MBR lights page
+        - button:
+            id: lights_nav_button
+            align: CENTER
+            y: -70
+            width: 90
+            height: 32
+            widgets:
+              - label:
+                  align: CENTER
+                  text_font: roboto18
+                  text: "Lights"
+            on_short_click:
+              then:
+                - lvgl.page.show: mbr_lights_page
         - label:
             id: temp_widget
             align: CENTER
@@ -334,6 +458,111 @@ lvgl:
             id: chiller_back_button
             align: CENTER
             y: 70
+            width: 60
+            height: 28
+            widgets:
+              - label:
+                  align: CENTER
+                  text_font: roboto18
+                  text: "Back"
+            on_short_click:
+              then:
+                - lvgl.page.show: time_page
+
+    - id: mbr_lights_page
+      widgets:
+        # prox
+        - label:
+            id: prox_label
+            align: CENTER
+            y: -65
+            text_font: roboto18
+            text: "prox"
+        - slider:
+            id: prox_slider
+            align: CENTER
+            y: -45
+            width: 150
+            height: 14
+            min_value: 0
+            max_value: 100
+            value: 0
+            on_value:
+              then:
+                - lvgl.label.update:
+                    id: prox_label
+                    text:
+                      format: "prox %.0f%%"
+                      args: [ 'x' ]
+            on_release:
+              then:
+                - script.execute:
+                    id: set_light
+                    entity: $light_prox
+                    level: !lambda 'return lv_slider_get_value(id(prox_slider));'
+        # med
+        - label:
+            id: med_label
+            align: CENTER
+            y: -15
+            text_font: roboto18
+            text: "med"
+        - slider:
+            id: med_slider
+            align: CENTER
+            y: 5
+            width: 150
+            height: 14
+            min_value: 0
+            max_value: 100
+            value: 0
+            on_value:
+              then:
+                - lvgl.label.update:
+                    id: med_label
+                    text:
+                      format: "med %.0f%%"
+                      args: [ 'x' ]
+            on_release:
+              then:
+                - script.execute:
+                    id: set_light
+                    entity: $light_med
+                    level: !lambda 'return lv_slider_get_value(id(med_slider));'
+        # dist
+        - label:
+            id: dist_label
+            align: CENTER
+            y: 35
+            text_font: roboto18
+            text: "dist"
+        - slider:
+            id: dist_slider
+            align: CENTER
+            y: 55
+            width: 150
+            height: 14
+            min_value: 0
+            max_value: 100
+            value: 0
+            on_value:
+              then:
+                - lvgl.label.update:
+                    id: dist_label
+                    text:
+                      format: "dist %.0f%%"
+                      args: [ 'x' ]
+            on_release:
+              then:
+                - script.execute:
+                    id: set_light
+                    entity: $light_dist
+                    level: !lambda 'return lv_slider_get_value(id(dist_slider));'
+        # Back to the main page
+        - button:
+            id: lights_back_button
+            align: CENTER
+            y: 92
             width: 60
             height: 28
             widgets:
