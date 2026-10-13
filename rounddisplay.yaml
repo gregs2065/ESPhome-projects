@@ -77,7 +77,7 @@ time:
               id: time_widget
               text_font: roboto42
               text: 
-                time_format: "%l:%M:%S %p"
+                time_format: "%l:%M:%S" # "%l:%M:%S %p"
                 time: esptime
           - lvgl.label.update:
               id: date_widget
@@ -231,7 +231,7 @@ lvgl:
             text_font: roboto42
             clickable: true
             text: 
-              time_format: "%l:%M:%S %p"
+              time_format: "%l:%M:%S" # "%l:%M:%S %p"
               time: esptime
 
 
