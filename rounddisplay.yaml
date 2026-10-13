@@ -61,8 +61,8 @@ font:
     glyphsets:
       - GF_Latin_Kernel
   - file: "gfonts://Roboto"
-    id: roboto42
-    size: 42
+    id: roboto48
+    size: 48
     glyphsets:
       - GF_Latin_Kernel
 
@@ -75,7 +75,7 @@ time:
         then:
           - lvgl.label.update:
               id: time_widget
-              text_font: roboto42
+              text_font: roboto48
               text: 
                 time_format: "%l:%M:%S" # "%l:%M:%S %p"
                 time: esptime
@@ -228,7 +228,7 @@ lvgl:
             align: CENTER
             id: time_widget
             # y: -100
-            text_font: roboto42
+            text_font: roboto48
             clickable: true
             text: 
               time_format: "%l:%M:%S" # "%l:%M:%S %p"
