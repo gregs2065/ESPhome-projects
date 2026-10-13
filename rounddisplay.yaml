@@ -245,7 +245,7 @@ lvgl:
         - label:
             id: temp_widget
             align: CENTER
-            y: 60
+            y: 70
             text_font: roboto18
             text:               
               format: "%.1f°"
@@ -256,7 +256,7 @@ lvgl:
         - label:
             id: date_widget
             align: CENTER
-            y: 50
+            y: 40
             text_font: roboto18
             text: 
               time_format: "%A %b %d"
