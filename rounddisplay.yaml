@@ -60,6 +60,11 @@ font:
     size: 36
     glyphsets:
       - GF_Latin_Kernel
+  - file: "gfonts://Roboto"
+    id: roboto48
+    size: 48
+    glyphsets:
+      - GF_Latin_Kernel
 
 time:
   - platform: sntp
@@ -252,12 +257,16 @@ lvgl:
             align: CENTER
             id: temp_widget
             # y: -100
-            text_font: roboto36
+            text_font: roboto48
             clickable: true
             text: 
-              format: "%.1f°"
-              args: [ id(outside_temp).get_state() ]
-            # Tap the temperature to open the bed chiller page
+              time_format: "%l:%M:%S %p"
+              time: esptime
+
+
+            
+            
+            # Tap the time to open the bed chiller page
             on_short_click:
               then:
                 - lvgl.page.show: bed_chiller_page
@@ -266,9 +275,9 @@ lvgl:
             id: time_widget
             align: CENTER
             y: 95
-            text: 
-              time_format: "%H:%M:%S"
-              time: esptime
+            text:               
+              format: "%.1f°"
+              args: [ id(outside_temp).get_state() ]
             on_short_click:
               then:
                 - script.execute: screenoff
