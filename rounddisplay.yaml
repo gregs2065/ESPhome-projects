@@ -75,7 +75,7 @@ time:
         then:
           - lvgl.label.update:
               id: time_widget
-              text_font: roboto18
+              text_font: roboto42
               text: 
                 time_format: "%l:%M:%S %p"
                 time: esptime
@@ -87,36 +87,7 @@ time:
                 time: esptime
 
 text_sensor:
-  # - platform: homeassistant
-  #   id: music_state
-  #   entity_id: $mediaplayer
-  # - platform: homeassistant
-  #   id: track_name
-  #   entity_id: $mediaplayer
-  #   attribute: media_title
-  #   on_value:
-  #     then:
-  #       - lvgl.label.update:
-  #           id: track_name_widget
-  #           text: !lambda return id(track_name).state;
-  # - platform: homeassistant
-  #   id: track_artist
-  #   entity_id: $mediaplayer
-  #   attribute: media_artist
-  #   on_value:
-  #     then:
-  #       - lvgl.label.update:
-  #           id: track_artist_widget
-  #           text: !lambda return id(track_artist).state;
-  # - platform: homeassistant
-  #   id: track_album
-  #   entity_id: $mediaplayer
-  #   attribute: media_album_name
-  #   on_value:
-  #     then:
-  #       - lvgl.label.update:
-  #           id: track_album_widget
-  #           text: !lambda return id(track_album).state;
+
 
 sensor:
   - platform: homeassistant
@@ -274,7 +245,8 @@ lvgl:
         - label:
             id: temp_widget
             align: CENTER
-            y: 95
+            y: 85
+            text_font: roboto18
             text:               
               format: "%.1f°"
               args: [ id(outside_temp).get_state() ]
@@ -284,7 +256,8 @@ lvgl:
         - label:
             id: date_widget
             align: CENTER
-            y: 80
+            y: 70
+            text_font: roboto18
             text: 
               time_format: "%A %b %d"
               time: esptime
