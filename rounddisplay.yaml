@@ -61,8 +61,8 @@ font:
     glyphsets:
       - GF_Latin_Kernel
   - file: "gfonts://Roboto"
-    id: roboto48
-    size: 48
+    id: roboto42
+    size: 42
     glyphsets:
       - GF_Latin_Kernel
 
@@ -77,7 +77,7 @@ time:
               id: time_widget
               text_font: roboto18
               text: 
-                time_format: "%H:%M:%S"
+                time_format: "%l:%M:%S %p"
                 time: esptime
           - lvgl.label.update:
               id: date_widget
@@ -255,9 +255,9 @@ lvgl:
       widgets:
         - label:
             align: CENTER
-            id: temp_widget
+            id: time_widget
             # y: -100
-            text_font: roboto48
+            text_font: roboto42
             clickable: true
             text: 
               time_format: "%l:%M:%S %p"
@@ -272,7 +272,7 @@ lvgl:
                 - lvgl.page.show: bed_chiller_page
         # Time and date now live on the main page only
         - label:
-            id: time_widget
+            id: temp_widget
             align: CENTER
             y: 95
             text:               
