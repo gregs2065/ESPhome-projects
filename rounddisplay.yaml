@@ -26,6 +26,13 @@ esphome:
     - priority: -100
       then:
         - script.execute: screentime
+        # Swipe down on the main page -> MBR lights page
+        - lambda: |-
+            lv_obj_add_event_cb(id(time_page), [](lv_event_t *e) {
+              if (lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_BOTTOM) {
+                id(show_lights_page).execute();
+              }
+            }, LV_EVENT_GESTURE, nullptr);
         - lvgl.label.update:
               id: date_widget
               text: 
@@ -267,6 +274,9 @@ script:
                 action: light.turn_off
                 data:
                   entity_id: !lambda 'return entity;'
+  - id: show_lights_page
+    then:
+      - lvgl.page.show: mbr_lights_page
   - id: screentime
     mode: restart
     then:
@@ -351,21 +361,6 @@ lvgl:
             on_short_click:
               then:
                 - lvgl.page.show: bed_chiller_page
-        # Button to open the MBR lights page
-        - button:
-            id: lights_nav_button
-            align: CENTER
-            y: -70
-            width: 90
-            height: 32
-            widgets:
-              - label:
-                  align: CENTER
-                  text_font: roboto18
-                  text: "Lights"
-            on_short_click:
-              then:
-                - lvgl.page.show: mbr_lights_page
         - label:
             id: temp_widget
             align: CENTER
