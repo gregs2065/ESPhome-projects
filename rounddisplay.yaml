@@ -31,7 +31,8 @@ esphome:
         # Swipe down cycle: time page -> more lights -> MBR lights -> time page
         - lambda: |-
             lv_obj_add_event_cb(id(time_page)->obj, [](lv_event_t *e) {
-              if (lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_BOTTOM) {
+              // Ignore the tap/swipe that woke the screen
+              if (!id(wake_tap) && lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_BOTTOM) {
                 id(show_more_lights_page).execute();
               }
             }, LV_EVENT_GESTURE, nullptr);
@@ -72,6 +73,13 @@ wifi:
   domain: .lan
 
 logger:
+
+globals:
+  # True while the touch that woke the screen from screensaver is still being handled,
+  # so that tap is swallowed instead of pressing a widget.
+  - id: wake_tap
+    type: bool
+    initial_value: 'false'
 
 font:
   - file: "gfonts://Roboto"
@@ -339,11 +347,28 @@ script:
     then:
       - light.turn_on: back_light
       - delay: $screensaver
+      # Screensaver: go back to the time page, then turn the screen off
+      - lvgl.page.show: time_page
       - light.turn_off: back_light
   - id: screenoff
     then:
       - script.stop: screentime
+      - lvgl.page.show: time_page
       - light.turn_off: back_light
+  # Called on every touch. If the screen is off, flag this touch as a wake-up tap.
+  - id: touch_activity
+    then:
+      - lambda: |-
+          if (!id(back_light).current_values.is_on()) {
+            id(wake_tap) = true;
+          }
+      - script.execute: screentime
+  # Clear the wake-up flag shortly after the finger is lifted
+  - id: wake_clear
+    mode: restart
+    then:
+      - delay: 400ms
+      - lambda: 'id(wake_tap) = false;'
 
 output:
   - platform: ledc
@@ -391,7 +416,9 @@ touchscreen:
     id: touch
     interrupt_pin: $tint
     on_update:
-      - script.execute: screentime
+      - script.execute: touch_activity
+    on_release:
+      - script.execute: wake_clear
       # - lambda: |-
       #       for (auto touch: touches)  {
       #           if (touch.state <= 2) {
@@ -417,29 +444,41 @@ lvgl:
             # Tap the time to open the bed chiller page
             on_short_click:
               then:
-                - lvgl.page.show: bed_chiller_page
+                - if:
+                    condition:
+                      lambda: 'return !id(wake_tap);'
+                    then:
+                      - lvgl.page.show: bed_chiller_page
         - label:
             id: temp_widget
             align: CENTER
             y: 70
             text_font: roboto18
-            text:               
+            text:
               format: "%.1f°"
               args: [ id(outside_temp).get_state() ]
             on_short_click:
               then:
-                - script.execute: screenoff
+                - if:
+                    condition:
+                      lambda: 'return !id(wake_tap);'
+                    then:
+                      - script.execute: screenoff
         - label:
             id: date_widget
             align: CENTER
             y: 40
             text_font: roboto18
-            text: 
+            text:
               time_format: "%A %b %d"
               time: esptime
             on_short_click:
               then:
-                - script.execute: screenoff
+                - if:
+                    condition:
+                      lambda: 'return !id(wake_tap);'
+                    then:
+                      - script.execute: screenoff
 
     - id: bed_chiller_page
       widgets:
@@ -610,9 +649,9 @@ lvgl:
                     id: set_light
                     entity: $light_dist
                     level: !lambda 'return lv_slider_get_value(id(dist_slider));'
-        # Back to the main page
+        # Next: on to the main page
         - button:
-            id: lights_back_button
+            id: lights_next_button
             align: CENTER
             y: 92
             width: 60
@@ -621,7 +660,7 @@ lvgl:
               - label:
                   align: CENTER
                   text_font: roboto18
-                  text: "Back"
+                  text: "Next"
             on_short_click:
               then:
                 - lvgl.page.show: time_page
@@ -681,9 +720,9 @@ lvgl:
                     action: homeassistant.toggle
                     data:
                       entity_id: $light_office
-        # Back to the main page
+        # Next: on to the MBR lights page
         - button:
-            id: more_lights_back_button
+            id: more_lights_next_button
             align: CENTER
             y: 92
             width: 60
@@ -692,7 +731,7 @@ lvgl:
               - label:
                   align: CENTER
                   text_font: roboto18
-                  text: "Back"
+                  text: "Next"
             on_short_click:
               then:
-                - lvgl.page.show: time_page
+                - lvgl.page.show: mbr_lights_page
