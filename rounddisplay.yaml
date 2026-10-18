@@ -10,7 +10,7 @@ substitutions:
   light_office: light.light_switch_karrie_s_office_light
   weather: sensor.outside_temp # Replace with a suitable weather entity from your home assistant
   chiller: input_boolean.bed_chiller_power_greg # Replace with the Home Assistant switch entity for your bed chiller
-  screensaver: 5 min # Timeout for how long the screen should stay on after the last interaction
+  screensaver_default: "5" # Default screensaver timeout in minutes (changeable from Home Assistant afterwards)
   sdapin: GPIO4
   sclpin: GPIO5
   tint: GPIO0
@@ -346,10 +346,15 @@ script:
     mode: restart
     then:
       - light.turn_on: back_light
-      - delay: $screensaver
-      # Screensaver: go back to the time page, then turn the screen off
-      - lvgl.page.show: time_page
-      - light.turn_off: back_light
+      # Only arm the screensaver timer when it is enabled in Home Assistant
+      - if:
+          condition:
+            lambda: 'return id(screensaver_enabled).state;'
+          then:
+            - delay: !lambda 'return (uint32_t) (id(screensaver_minutes).state * 60000.0f);'
+            # Screensaver: go back to the time page, then turn the screen off
+            - lvgl.page.show: time_page
+            - light.turn_off: back_light
   - id: screenoff
     then:
       - script.stop: screentime
@@ -369,6 +374,37 @@ script:
     then:
       - delay: 400ms
       - lambda: 'id(wake_tap) = false;'
+
+# Screensaver settings, exposed to Home Assistant as a number and a switch.
+# Both are remembered across reboots. Changing either one restarts the timer right away.
+number:
+  - platform: template
+    name: "Screensaver Timeout"
+    id: screensaver_minutes
+    unit_of_measurement: "min"
+    min_value: 1
+    max_value: 60
+    step: 1
+    mode: box
+    initial_value: ${screensaver_default}
+    restore_value: true
+    optimistic: true
+    entity_category: config
+    set_action:
+      - script.execute: screentime
+
+switch:
+  - platform: template
+    name: "Screensaver Enabled"
+    id: screensaver_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+    # Turning it off wakes the screen and leaves it on; turning it on restarts the timer.
+    turn_on_action:
+      - script.execute: screentime
+    turn_off_action:
+      - script.execute: screentime
 
 output:
   - platform: ledc
