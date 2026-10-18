@@ -405,7 +405,6 @@ display:
     id: watchface
     reset_pin: $tres
     cs_pin: $cspin
-    # rotation: 180
     dc_pin: 
       number: $dcpin
       ignore_strapping_warning: true
@@ -428,7 +427,7 @@ touchscreen:
 
 lvgl:
   buffer_size: 25%
-  rotation: 90
+  rotation: 0
   pages:
     - id: time_page
       widgets:
