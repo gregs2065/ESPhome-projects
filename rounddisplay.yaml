@@ -1,6 +1,6 @@
 substitutions:
   devicename: round-display
-  friendname: Round Display2
+  friendname: Round Display
   chiller: input_boolean.bed_chiller_power_greg # Replace with the Home Assistant switch entity for your bed chiller
   weather: sensor.outside_temp # Replace with a suitable weather entity from your home assistant
   screensaver: 5 min # Timeout for how long the screen should stay on after the last interaction
