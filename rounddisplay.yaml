@@ -58,6 +58,11 @@ font:
     size: 36
     glyphsets:
       - GF_Latin_Kernel
+  - file: "gfonts://Roboto"
+    id: roboto48
+    size: 48
+    glyphsets:
+      - GF_Latin_Kernel
 
 time:
   - platform: sntp
@@ -70,7 +75,7 @@ time:
               id: time_widget
               text_font: roboto18
               text: 
-                time_format: "%H:%M:%S"
+                time_format: "%H:%M"
                 time: esptime
           - lvgl.label.update:
               id: date_widget
@@ -256,7 +261,7 @@ lvgl:
             align: CENTER
             id: temp_widget
             # y: -100
-            text_font: roboto36
+            text_font: roboto48
             text: 
               format: "%.1f°"
               args: [ id(outside_temp).get_state() ]
