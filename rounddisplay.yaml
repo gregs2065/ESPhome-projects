@@ -1,16 +1,9 @@
 substitutions:
   devicename: round-display
-  friendname: Round Display
-  mediaplayer: media_player.home_theater # Replace with a suitable media player entity you want to control
-  chiller_temp: input_number.bed_chiller_temp_greg # Bed chiller setpoint (70-90 F)
-  light_prox: light.keypad_with_dimmer_49_f4_2e_main
-  light_med: light.micro_dimmer_55_94_bd
-  light_dist: light.keypad_dimmer_56_7b_21_main
-  light_mbr_group: light.mbr_lights_group
-  light_office: light.light_switch_karrie_s_office_light
-  weather: sensor.outside_temp # Replace with a suitable weather entity from your home assistant
+  friendname: Round Display2
   chiller: input_boolean.bed_chiller_power_greg # Replace with the Home Assistant switch entity for your bed chiller
-  screensaver_default: "5" # Default screensaver timeout in minutes (changeable from Home Assistant afterwards)
+  weather: sensor.outside_temp # Replace with a suitable weather entity from your home assistant
+  screensaver: 5 min # Timeout for how long the screen should stay on after the last interaction
   sdapin: GPIO4
   sclpin: GPIO5
   tint: GPIO0
@@ -28,26 +21,6 @@ esphome:
     - priority: -100
       then:
         - script.execute: screentime
-        # Swipe down cycle: time page -> more lights -> MBR lights -> time page
-        - lambda: |-
-            lv_obj_add_event_cb(id(time_page)->obj, [](lv_event_t *e) {
-              // Ignore the tap/swipe that woke the screen
-              if (!id(wake_tap) && lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_BOTTOM) {
-                id(show_more_lights_page).execute();
-              }
-            }, LV_EVENT_GESTURE, nullptr);
-            // Swipe down on the more lights page -> MBR lights page
-            lv_obj_add_event_cb(id(more_lights_page)->obj, [](lv_event_t *e) {
-              if (lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_BOTTOM) {
-                id(show_lights_page).execute();
-              }
-            }, LV_EVENT_GESTURE, nullptr);
-            // Swipe down on the MBR lights page -> time page
-            lv_obj_add_event_cb(id(mbr_lights_page)->obj, [](lv_event_t *e) {
-              if (lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_BOTTOM) {
-                id(show_time_page).execute();
-              }
-            }, LV_EVENT_GESTURE, nullptr);
         - lvgl.label.update:
               id: date_widget
               text: 
@@ -74,13 +47,6 @@ wifi:
 
 logger:
 
-globals:
-  # True while the touch that woke the screen from screensaver is still being handled,
-  # so that tap is swallowed instead of pressing a widget.
-  - id: wake_tap
-    type: bool
-    initial_value: 'false'
-
 font:
   - file: "gfonts://Roboto"
     id: roboto18
@@ -90,11 +56,6 @@ font:
   - file: "gfonts://Roboto"
     id: roboto36
     size: 36
-    glyphsets:
-      - GF_Latin_Kernel
-  - file: "gfonts://Roboto"
-    id: roboto48
-    size: 48
     glyphsets:
       - GF_Latin_Kernel
 
@@ -107,9 +68,9 @@ time:
         then:
           - lvgl.label.update:
               id: time_widget
-              text_font: roboto48
+              text_font: roboto18
               text: 
-                time_format: "%l:%M:%S" # "%l:%M:%S %p"
+                time_format: "%H:%M:%S"
                 time: esptime
           - lvgl.label.update:
               id: date_widget
@@ -118,19 +79,37 @@ time:
                 time_format: "%A %b %d"
                 time: esptime
 
-      - hours: 2,5
-        minutes: 5
-        seconds: 0
-        then:
-          - switch.turn_on: switch_antiburn
-      - hours: 2,5
-        minutes: 10
-        seconds: 0
-        then:
-          - switch.turn_off: switch_antiburn
-
 text_sensor:
-
+  # - platform: homeassistant
+  #   id: music_state
+  #   entity_id: $mediaplayer
+  # - platform: homeassistant
+  #   id: track_name
+  #   entity_id: $mediaplayer
+  #   attribute: media_title
+  #   on_value:
+  #     then:
+  #       - lvgl.label.update:
+  #           id: track_name_widget
+  #           text: !lambda return id(track_name).state;
+  # - platform: homeassistant
+  #   id: track_artist
+  #   entity_id: $mediaplayer
+  #   attribute: media_artist
+  #   on_value:
+  #     then:
+  #       - lvgl.label.update:
+  #           id: track_artist_widget
+  #           text: !lambda return id(track_artist).state;
+  # - platform: homeassistant
+  #   id: track_album
+  #   entity_id: $mediaplayer
+  #   attribute: media_album_name
+  #   on_value:
+  #     then:
+  #       - lvgl.label.update:
+  #           id: track_album_widget
+  #           text: !lambda return id(track_album).state;
 
 sensor:
   - platform: homeassistant
@@ -143,73 +122,6 @@ sensor:
             text: 
               format: "%.1f°"
               args: [ 'id(outside_temp).get_state()' ]
-  # Bed chiller setpoint from Home Assistant -> arc + readout
-  - platform: homeassistant
-    id: chiller_temp_sensor
-    entity_id: $chiller_temp
-    on_value:
-      then:
-        - lvgl.arc.update:
-            id: chiller_arc
-            value: !lambda return x;
-        - lvgl.label.update:
-            id: chiller_temp_label
-            text:
-              format: "%.0f°"
-              args: [ 'x' ]
-  # MBR light brightness (HA reports 0-255) -> sliders 0-100
-  - platform: homeassistant
-    id: light_prox_brightness
-    entity_id: $light_prox
-    attribute: brightness
-    on_value:
-      then:
-        - lvgl.slider.update:
-            id: prox_slider
-            value: !lambda 'return std::isnan(x) ? 0 : (int) roundf(x * 100.0f / 255.0f);'
-        - lvgl.label.update:
-            id: prox_label
-            text:
-              format: "prox %.0f%%"
-              args: [ 'std::isnan(x) ? 0.0f : roundf(x * 100.0f / 255.0f)' ]
-  - platform: homeassistant
-    id: light_med_brightness
-    entity_id: $light_med
-    attribute: brightness
-    on_value:
-      then:
-        - lvgl.slider.update:
-            id: med_slider
-            value: !lambda 'return std::isnan(x) ? 0 : (int) roundf(x * 100.0f / 255.0f);'
-        - lvgl.label.update:
-            id: med_label
-            text:
-              format: "med %.0f%%"
-              args: [ 'std::isnan(x) ? 0.0f : roundf(x * 100.0f / 255.0f)' ]
-  - platform: homeassistant
-    id: light_dist_brightness
-    entity_id: $light_dist
-    attribute: brightness
-    on_value:
-      then:
-        - lvgl.slider.update:
-            id: dist_slider
-            value: !lambda 'return std::isnan(x) ? 0 : (int) roundf(x * 100.0f / 255.0f);'
-        - lvgl.label.update:
-            id: dist_label
-            text:
-              format: "dist %.0f%%"
-              args: [ 'std::isnan(x) ? 0.0f : roundf(x * 100.0f / 255.0f)' ]
-  # MBR Lights group brightness (HA reports 0-255) -> slider 0-100
-  - platform: homeassistant
-    id: mbr_group_brightness
-    entity_id: $light_mbr_group
-    attribute: brightness
-    on_value:
-      then:
-        - lvgl.slider.update:
-            id: mbr_group_slider
-            value: !lambda 'return std::isnan(x) ? 0 : (int) roundf(x * 100.0f / 255.0f);'
   # - platform: homeassistant
   #   id: media_player_volume
   #   entity_id: $mediaplayer
@@ -232,8 +144,6 @@ binary_sensor:
       then:
         - lvgl.page.show: time_page
 
-  # Mirrors the real state of the bed chiller switch from Home Assistant,
-  # so the on-screen button always matches reality (even if toggled elsewhere).
   - platform: homeassistant
     id: bed_chiller_state
     entity_id: $chiller
@@ -246,199 +156,19 @@ binary_sensor:
         - lvgl.label.update:
             id: chiller_button_label
             text: !lambda |-
-              return std::string(x ? "ON" : "OFF");
-
-  # MBR lights: on/off state, so the sliders drop to 0 when a light is turned off
-  - platform: homeassistant
-    id: light_prox_state
-    entity_id: $light_prox
-    on_state:
-      then:
-        - if:
-            condition:
-              lambda: 'return !x;'
-            then:
-              - lvgl.slider.update:
-                  id: prox_slider
-                  value: 0
-              - lvgl.label.update:
-                  id: prox_label
-                  text: "prox 0%"
-  - platform: homeassistant
-    id: light_med_state
-    entity_id: $light_med
-    on_state:
-      then:
-        - if:
-            condition:
-              lambda: 'return !x;'
-            then:
-              - lvgl.slider.update:
-                  id: med_slider
-                  value: 0
-              - lvgl.label.update:
-                  id: med_label
-                  text: "med 0%"
-  - platform: homeassistant
-    id: light_dist_state
-    entity_id: $light_dist
-    on_state:
-      then:
-        - if:
-            condition:
-              lambda: 'return !x;'
-            then:
-              - lvgl.slider.update:
-                  id: dist_slider
-                  value: 0
-              - lvgl.label.update:
-                  id: dist_label
-                  text: "dist 0%"
-
-  # more_lights page: on/off state mirrors for the buttons
-  - platform: homeassistant
-    id: mbr_group_state
-    entity_id: $light_mbr_group
-    on_state:
-      then:
-        - lvgl.widget.update:
-            id: mbr_group_button
-            state:
-              checked: !lambda return x;
-        - if:
-            condition:
-              lambda: 'return !x;'
-            then:
-              - lvgl.slider.update:
-                  id: mbr_group_slider
-                  value: 0
-  - platform: homeassistant
-    id: office_state
-    entity_id: $light_office
-    on_state:
-      then:
-        - lvgl.widget.update:
-            id: office_button
-            state:
-              checked: !lambda return x;
+              return x ? "ON" : "OFF";
 
 script:
-  # Set a light's brightness (0 = off). Called when a slider is released.
-  - id: set_light
-    mode: restart
-    parameters:
-      entity: string
-      level: int
-    then:
-      - if:
-          condition:
-            lambda: 'return level > 0;'
-          then:
-            - homeassistant.action:
-                action: light.turn_on
-                data:
-                  entity_id: !lambda 'return entity;'
-                  brightness_pct: !lambda 'return to_string(level);'
-          else:
-            - homeassistant.action:
-                action: light.turn_off
-                data:
-                  entity_id: !lambda 'return entity;'
-  - id: show_lights_page
-    then:
-      - lvgl.page.show: mbr_lights_page
-  - id: show_more_lights_page
-    then:
-      - lvgl.page.show: more_lights_page
-  - id: show_time_page
-    then:
-      - lvgl.page.show: time_page
   - id: screentime
     mode: restart
     then:
       - light.turn_on: back_light
-      # Only arm the screensaver timer when it is enabled in Home Assistant
-      - if:
-          condition:
-            lambda: 'return id(screensaver_enabled).state;'
-          then:
-            - delay: !lambda 'return (uint32_t) (id(screensaver_minutes).state * 60000.0f);'
-            # Screensaver: go back to the time page, then turn the screen off
-            - lvgl.page.show: time_page
-            - light.turn_off: back_light
+      - delay: $screensaver
+      - light.turn_off: back_light
   - id: screenoff
     then:
       - script.stop: screentime
-      - lvgl.page.show: time_page
       - light.turn_off: back_light
-  # Called on every touch. If the screen is off, flag this touch as a wake-up tap.
-  - id: touch_activity
-    then:
-      - lambda: |-
-          if (!id(back_light).current_values.is_on()) {
-            id(wake_tap) = true;
-          }
-      - script.execute: screentime
-  # Clear the wake-up flag shortly after the finger is lifted
-  - id: wake_clear
-    mode: restart
-    then:
-      - delay: 400ms
-      - lambda: 'id(wake_tap) = false;'
-
-# Screensaver settings, exposed to Home Assistant as a number and a switch.
-# Both are remembered across reboots. Changing either one restarts the timer right away.
-number:
-  - platform: template
-    name: "Screensaver Timeout"
-    id: screensaver_minutes
-    unit_of_measurement: "min"
-    min_value: 1
-    max_value: 60
-    step: 1
-    mode: box
-    initial_value: ${screensaver_default}
-    restore_value: true
-    optimistic: true
-    entity_category: config
-    set_action:
-      - script.execute: screentime
-
-switch:
-  - platform: template
-    name: "Screensaver Enabled"
-    id: screensaver_enabled
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-    entity_category: config
-    # Turning it off wakes the screen and leaves it on; turning it on restarts the timer.
-    turn_on_action:
-      - script.execute: screentime
-    turn_off_action:
-      - script.execute: screentime
-
-  - platform: template
-    name: Antiburn
-    id: switch_antiburn
-    icon: mdi:television-shimmer
-    optimistic: true
-    entity_category: "config"
-    turn_on_action:
-      - logger.log: "Starting Antiburn"
-      - if:
-          condition: lvgl.is_paused
-          then:
-            - lvgl.resume:
-            - lvgl.widget.redraw:
-      - lvgl.pause:
-          show_snow: true
-    turn_off_action:
-      - logger.log: "Stopping Antiburn"
-      - if:
-          condition: lvgl.is_paused
-          then:
-            - lvgl.resume:
-            - lvgl.widget.redraw:
 
 output:
   - platform: ledc
@@ -475,6 +205,7 @@ display:
     id: watchface
     reset_pin: $tres
     cs_pin: $cspin
+    # rotation: 180
     dc_pin: 
       number: $dcpin
       ignore_strapping_warning: true
@@ -485,9 +216,7 @@ touchscreen:
     id: touch
     interrupt_pin: $tint
     on_update:
-      - script.execute: touch_activity
-    on_release:
-      - script.execute: wake_clear
+      - script.execute: screentime
       # - lambda: |-
       #       for (auto touch: touches)  {
       #           if (touch.state <= 2) {
@@ -497,107 +226,55 @@ touchscreen:
 
 lvgl:
   buffer_size: 25%
-  rotation: 0
+  rotation: 90
+  top_layer:
+    widgets:
+      - label:
+          id: time_widget
+          align: CENTER
+          y: 95
+          text: 
+            time_format: "%H:%m:%S"
+            time: esptime
+          on_short_click:
+            then:
+              - script.execute: screenoff
+      - label:
+          id: date_widget
+          align: CENTER
+          y: 80
+          text: 
+            time_format: "%A %b %d"
+            time: esptime
+          on_short_click:
+            then:
+              - script.execute: screenoff
   pages:
     - id: time_page
       widgets:
         - label:
             align: CENTER
-            id: time_widget
-            # y: -100
-            text_font: roboto48
-            clickable: true
-            text: 
-              time_format: "%l:%M:%S" # "%l:%M:%S %p"
-              time: esptime
-            # Tap the time to open the bed chiller page
-            on_short_click:
-              then:
-                - if:
-                    condition:
-                      lambda: 'return !id(wake_tap);'
-                    then:
-                      - lvgl.page.show: bed_chiller_page
-        - label:
             id: temp_widget
-            align: CENTER
-            y: 70
-            text_font: roboto18
-            text:
+            # y: -100
+            text_font: roboto36
+            text: 
               format: "%.1f°"
               args: [ id(outside_temp).get_state() ]
-            on_short_click:
-              then:
-                - if:
-                    condition:
-                      lambda: 'return !id(wake_tap);'
-                    then:
-                      - script.execute: screenoff
-        - label:
-            id: date_widget
-            align: CENTER
-            y: 40
-            text_font: roboto18
-            text:
-              time_format: "%A %b %d"
-              time: esptime
-            on_short_click:
-              then:
-                - if:
-                    condition:
-                      lambda: 'return !id(wake_tap);'
-                    then:
-                      - script.execute: screenoff
 
     - id: bed_chiller_page
       widgets:
-        # Setpoint arc (70-90 F) around the edge of the round display
-        - arc:
-            id: chiller_arc
-            align: CENTER
-            width: 225
-            height: 225
-            min_value: 70
-            max_value: 90
-            value: 70
-            adjustable: true
-            arc_width: 12
-            indicator:
-              arc_width: 12
-            # Live readout while dragging
-            on_value:
-              then:
-                - lvgl.label.update:
-                    id: chiller_temp_label
-                    text:
-                      format: "%.0f°"
-                      args: [ 'x' ]
-            # Send to Home Assistant only when the finger is lifted
-            on_release:
-              then:
-                - homeassistant.action:
-                    action: input_number.set_value
-                    data:
-                      entity_id: $chiller_temp
-                      value: !lambda 'return to_string(lv_arc_get_value(id(chiller_arc)));'
         - label:
             align: CENTER
-            y: -70
+            y: -85
             text_font: roboto18
             text: "Bed Chiller"
-        - label:
-            id: chiller_temp_label
-            align: CENTER
-            y: -35
-            text_font: roboto36
-            text: "--°"
         # On/off button (checkable = stays pressed when ON)
         - button:
             id: chiller_button
             align: CENTER
-            y: 15
-            width: 100
-            height: 50
+            y: -10
+            width: 120
+            height: 70
             checkable: true
             widgets:
               - label:
@@ -610,16 +287,16 @@ lvgl:
             on_short_click:
               then:
                 - homeassistant.action:
-                    action: homeassistant.toggle
+                    action: switch.toggle
                     data:
                       entity_id: $chiller
         # Back to the main page
         - button:
             id: chiller_back_button
             align: CENTER
-            y: 70
-            width: 60
-            height: 28
+            y: 50
+            width: 80
+            height: 36
             widgets:
               - label:
                   align: CENTER
@@ -628,179 +305,3 @@ lvgl:
             on_short_click:
               then:
                 - lvgl.page.show: time_page
-
-    - id: mbr_lights_page
-      widgets:
-        # prox
-        - label:
-            id: prox_label
-            align: CENTER
-            y: -65
-            text_font: roboto18
-            text: "prox"
-        - slider:
-            id: prox_slider
-            align: CENTER
-            y: -45
-            width: 150
-            height: 14
-            min_value: 0
-            max_value: 100
-            value: 0
-            on_value:
-              then:
-                - lvgl.label.update:
-                    id: prox_label
-                    text:
-                      format: "prox %.0f%%"
-                      args: [ 'x' ]
-            on_release:
-              then:
-                - script.execute:
-                    id: set_light
-                    entity: $light_prox
-                    level: !lambda 'return lv_slider_get_value(id(prox_slider));'
-        # med
-        - label:
-            id: med_label
-            align: CENTER
-            y: -15
-            text_font: roboto18
-            text: "med"
-        - slider:
-            id: med_slider
-            align: CENTER
-            y: 5
-            width: 150
-            height: 14
-            min_value: 0
-            max_value: 100
-            value: 0
-            on_value:
-              then:
-                - lvgl.label.update:
-                    id: med_label
-                    text:
-                      format: "med %.0f%%"
-                      args: [ 'x' ]
-            on_release:
-              then:
-                - script.execute:
-                    id: set_light
-                    entity: $light_med
-                    level: !lambda 'return lv_slider_get_value(id(med_slider));'
-        # dist
-        - label:
-            id: dist_label
-            align: CENTER
-            y: 35
-            text_font: roboto18
-            text: "dist"
-        - slider:
-            id: dist_slider
-            align: CENTER
-            y: 55
-            width: 150
-            height: 14
-            min_value: 0
-            max_value: 100
-            value: 0
-            on_value:
-              then:
-                - lvgl.label.update:
-                    id: dist_label
-                    text:
-                      format: "dist %.0f%%"
-                      args: [ 'x' ]
-            on_release:
-              then:
-                - script.execute:
-                    id: set_light
-                    entity: $light_dist
-                    level: !lambda 'return lv_slider_get_value(id(dist_slider));'
-        # Next: on to the main page
-        - button:
-            id: lights_next_button
-            align: CENTER
-            y: 92
-            width: 60
-            height: 28
-            widgets:
-              - label:
-                  align: CENTER
-                  text_font: roboto18
-                  text: "Next"
-            on_short_click:
-              then:
-                - lvgl.page.show: time_page
-
-    - id: more_lights_page
-      widgets:
-        # MBR Lights (group) on/off + brightness
-        - button:
-            id: mbr_group_button
-            align: CENTER
-            y: -65
-            width: 150
-            height: 40
-            checkable: true
-            widgets:
-              - label:
-                  align: CENTER
-                  text_font: roboto18
-                  text: "MBR Lights"
-            on_short_click:
-              then:
-                - homeassistant.action:
-                    action: homeassistant.toggle
-                    data:
-                      entity_id: $light_mbr_group
-        - slider:
-            id: mbr_group_slider
-            align: CENTER
-            y: -10
-            width: 150
-            height: 14
-            min_value: 0
-            max_value: 100
-            value: 0
-            on_release:
-              then:
-                - script.execute:
-                    id: set_light
-                    entity: $light_mbr_group
-                    level: !lambda 'return lv_slider_get_value(id(mbr_group_slider));'
-        # Office on/off
-        - button:
-            id: office_button
-            align: CENTER
-            y: 45
-            width: 150
-            height: 40
-            checkable: true
-            widgets:
-              - label:
-                  align: CENTER
-                  text_font: roboto18
-                  text: "Office"
-            on_short_click:
-              then:
-                - homeassistant.action:
-                    action: homeassistant.toggle
-                    data:
-                      entity_id: $light_office
-        # Next: on to the MBR lights page
-        - button:
-            id: more_lights_next_button
-            align: CENTER
-            y: 92
-            width: 60
-            height: 28
-            widgets:
-              - label:
-                  align: CENTER
-                  text_font: roboto18
-                  text: "Next"
-            on_short_click:
-              then:
-                - lvgl.page.show: mbr_lights_page
